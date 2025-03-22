@@ -49,7 +49,7 @@ class ParkingApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const LoadingScreen(), // Set LoadingScreen as initial screen
+      home: const LoadingScreen(), // Set LoadingScreen as the initial screen
     );
   }
 }
@@ -82,30 +82,34 @@ class _LoadingScreenState extends State<LoadingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.blueGrey[100], // Parking lot vibe
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Lottie animation
-          Lottie.asset(
-            'assets/lottie/main_car.json',
-            width: 300,
-            height: 300,
-            fit: BoxFit.contain,
-          ),
-
-          const SizedBox(height: 20),
-
-          // Loading text
-          Text(
-            "Parking Your Vehicle...",
-            style: TextStyle(
-              fontSize: 24,
-              color: Colors.black87,
-              fontWeight: FontWeight.w600,
-              fontFamily: GoogleFonts.poppins().fontFamily,
+      body: Center(
+        // Centers everything inside
+        child: Column(
+          mainAxisSize: MainAxisSize.min, // Prevents full screen stretch
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Lottie animation
+            Lottie.asset(
+              'assets/lottie/main_car.json',
+              width: 300,
+              height: 300,
+              fit: BoxFit.contain,
             ),
-          ),
-        ],
+
+            const SizedBox(height: 20),
+
+            // Loading text
+            Text(
+              "Parking Your Vehicle...",
+              style: TextStyle(
+                fontSize: 24,
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+                fontFamily: GoogleFonts.poppins().fontFamily,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

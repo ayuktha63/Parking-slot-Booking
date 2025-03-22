@@ -17,6 +17,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   share: ^2.0.4
   lottie: ^3.1.0
+  pdf: ^3.11.3
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
 
 dev_dependencies:
   flutter_test:
@@ -27,6 +30,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/lottie/success.json
+    - assets/lottie/main_car.json
   # Uncomment and customize this section if you want to add custom fonts
   # fonts:
   #   - family: Schyler

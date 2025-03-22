@@ -1,6 +1,6 @@
 // booking_screen.dart
 import 'package:flutter/material.dart';
-import 'success_screen.dart';
+import 'SuccessAnimationScreen.dart';
 
 class BookingScreen extends StatefulWidget {
   final String location;
@@ -73,7 +73,8 @@ class _BookingScreenState extends State<BookingScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => SuccessScreen(
+          builder: (context) => SuccessAnimationScreen(
+            // Changed to animation screen
             location: widget.location,
             date: selectedDate!,
             time: selectedTime!,

@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "439285294613",
+    "project_id": "parking-slot-booking-cffbc",
+    "storage_bucket": "parking-slot-booking-cffbc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:439285294613:android:0e2e6c05453a934683901c",
+        "android_client_info": {
+          "package_name": "com.example.parkingBooking"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1y2kDSVOSTzEI1La_bwUk_M1eAhz5d_0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:439285294613:android:4eac3441ab23fb2c83901c",
+        "android_client_info": {
+          "package_name": "com.example.parking_booking"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1y2kDSVOSTzEI1La_bwUk_M1eAhz5d_0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

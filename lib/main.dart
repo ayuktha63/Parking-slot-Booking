@@ -1,13 +1,22 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'home_screen.dart'; // Ensure this import points to your HomeScreen file
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart'; // Import Lottie package
+import 'package:lottie/lottie.dart';
+import 'firebase_options.dart';
+import 'otp_screen.dart';
 
-void main() {
-  runApp(ParkingApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(const ParkingApp());
 }
 
 class ParkingApp extends StatelessWidget {
+  const ParkingApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -49,12 +58,12 @@ class ParkingApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const LoadingScreen(), // Set LoadingScreen as the initial screen
+      home: const LoadingScreen(),
     );
   }
 }
 
-// Loading Screen with Lottie animation
+// Loading Screen with Lottie animation and phone authentication
 class LoadingScreen extends StatefulWidget {
   const LoadingScreen({super.key});
 
@@ -63,42 +72,96 @@ class LoadingScreen extends StatefulWidget {
 }
 
 class _LoadingScreenState extends State<LoadingScreen> {
-  @override
-  void initState() {
-    super.initState();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final TextEditingController _phoneController = TextEditingController();
 
-    // Navigate to HomeScreen after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => HomeScreen()),
-        );
-      }
-    });
+  void _verifyPhoneNumber() async {
+    await FirebaseAuth.instance
+        .setSettings(appVerificationDisabledForTesting: true);
+    String phoneNumber = _phoneController.text.trim();
+    if (phoneNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a valid phone number")),
+      );
+      return;
+    }
+    _auth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      timeout: const Duration(seconds: 60),
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        try {
+          await _auth.signInWithCredential(credential);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text("Phone number automatically verified!")),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Error: $e")),
+            );
+          }
+        }
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text("Verification failed: ${e.code} - ${e.message}")),
+          );
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OTPScreen(verificationId: verificationId),
+            ),
+          );
+        }
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        debugPrint("Timeout: $verificationId");
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blueGrey[100], // Parking lot vibe
+      backgroundColor: Colors.blueGrey[100],
       body: Center(
-        // Centers everything inside
         child: Column(
-          mainAxisSize: MainAxisSize.min, // Prevents full screen stretch
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Lottie animation
             Lottie.asset(
               'assets/lottie/main_car.json',
               width: 300,
               height: 300,
               fit: BoxFit.contain,
             ),
-
             const SizedBox(height: 20),
-
-            // Loading text
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: "Enter Phone Number",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: _verifyPhoneNumber,
+              child: const Text("Verify Phone Number"),
+            ),
+            const SizedBox(height: 20),
             Text(
               "Parking Your Vehicle...",
               style: TextStyle(

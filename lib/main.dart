@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'firebase_options.dart';
-import 'otp_screen.dart';
+import 'phone_screen.dart';
+import 'dart:async';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,7 +64,7 @@ class ParkingApp extends StatelessWidget {
   }
 }
 
-// Loading Screen with Lottie animation and phone authentication
+// Loading Screen with Lottie animation
 class LoadingScreen extends StatefulWidget {
   const LoadingScreen({super.key});
 
@@ -72,61 +73,17 @@ class LoadingScreen extends StatefulWidget {
 }
 
 class _LoadingScreenState extends State<LoadingScreen> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final TextEditingController _phoneController = TextEditingController();
-
-  void _verifyPhoneNumber() async {
-    await FirebaseAuth.instance
-        .setSettings(appVerificationDisabledForTesting: true);
-    String phoneNumber = _phoneController.text.trim();
-    if (phoneNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid phone number")),
-      );
-      return;
-    }
-    _auth.verifyPhoneNumber(
-      phoneNumber: phoneNumber,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        try {
-          await _auth.signInWithCredential(credential);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text("Phone number automatically verified!")),
-            );
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Error: $e")),
-            );
-          }
-        }
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text("Verification failed: ${e.code} - ${e.message}")),
-          );
-        }
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => OTPScreen(verificationId: verificationId),
-            ),
-          );
-        }
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        debugPrint("Timeout: $verificationId");
-      },
-    );
+  @override
+  void initState() {
+    super.initState();
+    Timer(const Duration(seconds: 1), () {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => PhoneScreen()),
+        );
+      }
+    });
   }
 
   @override
@@ -143,23 +100,6 @@ class _LoadingScreenState extends State<LoadingScreen> {
               width: 300,
               height: 300,
               fit: BoxFit.contain,
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: "Enter Phone Number",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: _verifyPhoneNumber,
-              child: const Text("Verify Phone Number"),
             ),
             const SizedBox(height: 20),
             Text(

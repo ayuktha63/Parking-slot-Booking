@@ -65,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Color(0xFFF5F7FA),
       appBar: AppBar(
+        automaticallyImplyLeading: false, // This removes the back button
         title: Text("ParkEasy"),
         actions: [
           IconButton(

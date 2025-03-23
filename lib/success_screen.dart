@@ -10,7 +10,8 @@ class SuccessScreen extends StatelessWidget {
   final String vehicleType;
   final List<int> slots;
 
-  const SuccessScreen({super.key, 
+  const SuccessScreen({
+    super.key,
     required this.location,
     required this.date,
     required this.time,

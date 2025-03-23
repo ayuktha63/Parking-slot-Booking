@@ -64,26 +64,27 @@ class ParkingApp extends StatelessWidget {
   }
 }
 
-// Loading Screen with Lottie animation
-class LoadingScreen extends StatefulWidget {
-  const LoadingScreen({super.key});
-
-  @override
-  State<LoadingScreen> createState() => _LoadingScreenState();
-}
-
 class _LoadingScreenState extends State<LoadingScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(seconds: 1), () {
+    _checkFirebaseAndNavigate();
+  }
+
+  Future<void> _checkFirebaseAndNavigate() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ); // Re-check if needed
       if (mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => PhoneScreen()),
         );
       }
-    });
+    } catch (e) {
+      print('Firebase init error: $e');
+    }
   }
 
   @override

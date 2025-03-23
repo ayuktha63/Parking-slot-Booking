@@ -13,22 +13,26 @@ class BookingScreen extends StatefulWidget {
 
 class _BookingScreenState extends State<BookingScreen> {
   String? selectedVehicle;
-  DateTime? selectedDate;
-  TimeOfDay? selectedTime;
+  DateTime? startDate;
+  TimeOfDay? startTime;
+  DateTime? endDate;
+  TimeOfDay? endTime;
   Set<int> selectedSlots = {};
+  final TextEditingController _vehicleNumberController =
+      TextEditingController();
 
   List<String> vehicleTypes = ["Car", "Bike"];
 
-  Future<void> _selectDate(BuildContext context) async {
+  Future<void> _selectStartDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: selectedDate ?? DateTime.now(),
+      initialDate: startDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime(2101),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
+            colorScheme: const ColorScheme.light(
               primary: Color(0xFF3F51B5),
               onPrimary: Colors.white,
               onSurface: Colors.black,
@@ -39,18 +43,18 @@ class _BookingScreenState extends State<BookingScreen> {
       },
     );
     if (picked != null) {
-      setState(() => selectedDate = picked);
+      setState(() => startDate = picked);
     }
   }
 
-  Future<void> _selectTime(BuildContext context) async {
+  Future<void> _selectStartTime(BuildContext context) async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
-      initialTime: selectedTime ?? TimeOfDay.now(),
+      initialTime: startTime ?? TimeOfDay.now(),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
+            colorScheme: const ColorScheme.light(
               primary: Color(0xFF3F51B5),
               onPrimary: Colors.white,
               onSurface: Colors.black,
@@ -61,23 +65,71 @@ class _BookingScreenState extends State<BookingScreen> {
       },
     );
     if (picked != null) {
-      setState(() => selectedTime = picked);
+      setState(() => startTime = picked);
+    }
+  }
+
+  Future<void> _selectEndDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: endDate ?? (startDate ?? DateTime.now()),
+      firstDate: startDate ?? DateTime.now(),
+      lastDate: DateTime(2101),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF3F51B5),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => endDate = picked);
+    }
+  }
+
+  Future<void> _selectEndTime(BuildContext context) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: endTime ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF3F51B5),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => endTime = picked);
     }
   }
 
   void _confirmBooking() {
     if (selectedVehicle != null &&
+        _vehicleNumberController.text.isNotEmpty &&
         selectedSlots.isNotEmpty &&
-        selectedDate != null &&
-        selectedTime != null) {
+        startDate != null &&
+        startTime != null &&
+        endDate != null &&
+        endTime != null) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => SuccessAnimationScreen(
-            // Changed to animation screen
             location: widget.location,
-            date: selectedDate!,
-            time: selectedTime!,
+            date: startDate!, // For simplicity, passing start date
+            time: startTime!, // For simplicity, passing start time
             vehicleType: selectedVehicle!,
             slots: selectedSlots.toList(),
           ),
@@ -103,8 +155,8 @@ class _BookingScreenState extends State<BookingScreen> {
               Text("Incomplete Booking"),
             ],
           ),
-          content:
-              Text("Please complete all selections to proceed with booking."),
+          content: Text(
+              "Please complete all selections (vehicle type, number, dates, times, and slots) to proceed with booking."),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -117,12 +169,19 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   @override
+  void dispose() {
+    _vehicleNumberController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: Text("Book a Parking Spot"),
+        title: const Text("Book a Parking Spot"),
         elevation: 0,
+        backgroundColor: const Color(0xFF3F51B5),
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -180,44 +239,73 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                     child: Padding(
                       padding: EdgeInsets.all(16),
-                      child: DropdownButtonFormField<String>(
-                        decoration: InputDecoration(
-                          labelText: "Select Vehicle Type",
-                          labelStyle: TextStyle(color: Color(0xFF3F51B5)),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
+                      child: Column(
+                        children: [
+                          DropdownButtonFormField<String>(
+                            decoration: InputDecoration(
+                              labelText: "Select Vehicle Type",
+                              labelStyle: TextStyle(color: Color(0xFF3F51B5)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide:
+                                    BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide:
+                                    BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide:
+                                    BorderSide(color: Color(0xFF3F51B5)),
+                              ),
+                              prefixIcon: Icon(Icons.directions_car,
+                                  color: Color(0xFF3F51B5)),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            value: selectedVehicle,
+                            items: vehicleTypes.map((vehicle) {
+                              return DropdownMenuItem(
+                                value: vehicle,
+                                child: Text(vehicle),
+                              );
+                            }).toList(),
+                            onChanged: (value) =>
+                                setState(() => selectedVehicle = value),
+                            dropdownColor: Colors.white,
+                            icon: Icon(Icons.arrow_drop_down,
+                                color: Color(0xFF3F51B5)),
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Color(0xFF3F51B5)),
-                          ),
-                          prefixIcon: Icon(Icons.directions_car,
-                              color: Color(0xFF3F51B5)),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                        value: selectedVehicle,
-                        items: vehicleTypes.map((vehicle) {
-                          return DropdownMenuItem(
-                            value: vehicle,
-                            child: Text(vehicle),
-                          );
-                        }).toList(),
-                        onChanged: (value) =>
-                            setState(() => selectedVehicle = value),
-                        dropdownColor: Colors.white,
-                        icon: Icon(Icons.arrow_drop_down,
-                            color: Color(0xFF3F51B5)),
+                          if (selectedVehicle != null) ...[
+                            SizedBox(height: 16),
+                            TextField(
+                              controller: _vehicleNumberController,
+                              decoration: InputDecoration(
+                                labelText: selectedVehicle == "Car"
+                                    ? "Car Number Plate"
+                                    : "Bike Number Plate",
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                prefixIcon: Icon(
+                                  selectedVehicle == "Car"
+                                      ? Icons.directions_car
+                                      : Icons.motorcycle,
+                                  color: Color(0xFF3F51B5),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey[100],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
                   SizedBox(height: 24),
-                  _buildSectionTitle("Date & Time"),
+                  _buildSectionTitle("Entry & Exit Timing"),
                   SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
@@ -233,8 +321,9 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                     child: Column(
                       children: [
+                        // Entry Date & Time
                         InkWell(
-                          onTap: () => _selectDate(context),
+                          onTap: () => _selectStartDate(context),
                           child: Container(
                             padding: EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -262,7 +351,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        "Date",
+                                        "Entry Date",
                                         style: TextStyle(
                                           fontSize: 14,
                                           color: Colors.grey[600],
@@ -270,9 +359,9 @@ class _BookingScreenState extends State<BookingScreen> {
                                       ),
                                       SizedBox(height: 4),
                                       Text(
-                                        selectedDate != null
-                                            ? "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}"
-                                            : "Select Date",
+                                        startDate != null
+                                            ? "${startDate!.day}/${startDate!.month}/${startDate!.year}"
+                                            : "Select Entry Date",
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
@@ -291,7 +380,122 @@ class _BookingScreenState extends State<BookingScreen> {
                           ),
                         ),
                         InkWell(
-                          onTap: () => _selectTime(context),
+                          onTap: () => _selectStartTime(context),
+                          child: Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(color: Colors.grey[200]!),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF3F51B5).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    Icons.access_time,
+                                    color: Color(0xFF3F51B5),
+                                  ),
+                                ),
+                                SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Entry Time",
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        startTime != null
+                                            ? startTime!.format(context)
+                                            : "Select Entry Time",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Exit Date & Time
+                        InkWell(
+                          onTap: () => _selectEndDate(context),
+                          child: Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(color: Colors.grey[200]!),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF3F51B5).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    Icons.calendar_today,
+                                    color: Color(0xFF3F51B5),
+                                  ),
+                                ),
+                                SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Exit Date",
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        endDate != null
+                                            ? "${endDate!.day}/${endDate!.month}/${endDate!.year}"
+                                            : "Select Exit Date",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () => _selectEndTime(context),
                           child: Container(
                             padding: EdgeInsets.all(16),
                             child: Row(
@@ -314,7 +518,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        "Time",
+                                        "Exit Time",
                                         style: TextStyle(
                                           fontSize: 14,
                                           color: Colors.grey[600],
@@ -322,9 +526,9 @@ class _BookingScreenState extends State<BookingScreen> {
                                       ),
                                       SizedBox(height: 4),
                                       Text(
-                                        selectedTime != null
-                                            ? selectedTime!.format(context)
-                                            : "Select Time",
+                                        endTime != null
+                                            ? endTime!.format(context)
+                                            : "Select Exit Time",
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,

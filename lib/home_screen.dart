@@ -1,6 +1,7 @@
 // home_screen.dart
 import 'package:flutter/material.dart';
 import 'booking_screen.dart';
+import 'profile_screen.dart'; // Import ProfileScreen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,28 +17,28 @@ class _HomeScreenState extends State<HomeScreen> {
       "cars": 20,
       "bikes": 10,
       "icon": Icons.local_mall,
-      "color": Color(0xFF4CAF50),
+      "color": const Color(0xFF4CAF50),
     },
     {
       "name": "Thambanoor Parking",
       "cars": 15,
       "bikes": 8,
       "icon": Icons.location_city,
-      "color": Color(0xFFF44336),
+      "color": const Color(0xFFF44336),
     },
     {
       "name": "Police Quaters Parking",
       "cars": 30,
       "bikes": 15,
       "icon": Icons.stadium,
-      "color": Color(0xFFFF9800),
+      "color": const Color(0xFFFF9800),
     },
     {
       "name": "Kowdiar Parking",
       "cars": 50,
       "bikes": 25,
       "icon": Icons.airplanemode_active,
-      "color": Color(0xFF9C27B0),
+      "color": const Color(0xFF9C27B0),
     },
   ];
 
@@ -65,14 +66,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        automaticallyImplyLeading: false, // This removes the back button
-        title: Text("ParkEasy"),
+        automaticallyImplyLeading: false, // Removes back button
+        title: const Text("ParkEasy"),
+        backgroundColor: const Color(0xFF3F51B5), // Match app theme
         actions: [
           IconButton(
-            icon: Icon(Icons.person_rounded),
-            onPressed: () {},
+            icon: const Icon(Icons.person_rounded, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
           ),
         ],
       ),
@@ -82,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             _buildSearchSection(),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Text(
                 "Available Parking Spots",
                 style: TextStyle(
@@ -94,7 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Expanded(
               child: ListView.builder(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 itemCount: filteredPlaces.length,
                 itemBuilder: (context, index) {
                   final place = filteredPlaces[index];
@@ -110,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSearchSection() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -129,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Color(0xFF303030),
             ),
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -160,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildParkingCard(BuildContext context, Map<String, dynamic> place) {
     return Container(
-      margin: EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),

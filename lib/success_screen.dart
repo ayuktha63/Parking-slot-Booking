@@ -10,7 +10,7 @@ class SuccessScreen extends StatelessWidget {
   final String vehicleType;
   final List<int> slots;
 
-  SuccessScreen({
+  const SuccessScreen({super.key, 
     required this.location,
     required this.date,
     required this.time,
@@ -72,7 +72,7 @@ Please arrive 15 minutes before your booking time.
                       ),
                     ),
                     SizedBox(height: 10),
-                    Container(
+                    SizedBox(
                       width: MediaQuery.of(context).size.width * 0.7,
                       child: Text(
                         "Your parking spot has been successfully reserved.",

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'booking_screen.dart';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
@@ -211,10 +213,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ElevatedButton(
                   onPressed: () =>
                       _navigateToBookingScreen(context, place["name"]),
-                  child: Text("Book Now"),
                   style: ElevatedButton.styleFrom(
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   ),
+                  child: Text("Book Now"),
                 ),
               ],
             ),

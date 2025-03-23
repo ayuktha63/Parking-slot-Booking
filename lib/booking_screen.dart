@@ -5,7 +5,7 @@ import 'SuccessAnimationScreen.dart';
 class BookingScreen extends StatefulWidget {
   final String location;
 
-  BookingScreen({required this.location});
+  const BookingScreen({super.key, required this.location});
 
   @override
   _BookingScreenState createState() => _BookingScreenState();
@@ -437,7 +437,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                   ),
                   SizedBox(height: 40),
-                  Container(
+                  SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(

@@ -28,7 +28,7 @@ class ParkingApp extends StatelessWidget {
         primaryColor: const Color(0xFF3F51B5),
         colorScheme: ColorScheme.fromSwatch().copyWith(
           secondary: const Color(0xFF03A9F4),
-          background: Colors.white,
+          surface: Colors.white,
         ),
         fontFamily: GoogleFonts.poppins().fontFamily,
         elevatedButtonTheme: ElevatedButtonThemeData(

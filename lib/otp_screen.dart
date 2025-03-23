@@ -4,7 +4,7 @@ import 'home_screen.dart';
 
 class OTPScreen extends StatefulWidget {
   final String verificationId;
-  const OTPScreen({required this.verificationId, Key? key}) : super(key: key);
+  const OTPScreen({required this.verificationId, super.key});
 
   @override
   _OTPScreenState createState() => _OTPScreenState();

@@ -4,7 +4,7 @@ import 'booking_screen.dart';
 import 'profile_screen.dart'; // Import ProfileScreen
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, required String phoneNumber});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'home_screen.dart';
 
 class OTPScreen extends StatefulWidget {
   final String verificationId;
-  const OTPScreen({required this.verificationId, super.key});
+  final String phoneNumber; // Add phoneNumber
+  const OTPScreen(
+      {required this.verificationId, required this.phoneNumber, super.key});
 
   @override
   _OTPScreenState createState() => _OTPScreenState();
@@ -16,15 +20,25 @@ class _OTPScreenState extends State<OTPScreen> {
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
-  @override
-  void dispose() {
-    for (var controller in _otpControllers) {
-      controller.dispose();
+  Future<void> _saveUserToMongoDB(String phoneNumber) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:3000/api/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': phoneNumber,
+          'name': '',
+          'car_number_plate': '',
+          'bike_number_plate': '',
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        print('Failed to save user to MongoDB: ${response.body}');
+      }
+    } catch (e) {
+      print('Error saving user to MongoDB: $e');
     }
-    for (var node in _focusNodes) {
-      node.dispose();
-    }
-    super.dispose();
   }
 
   void _verifyOTP() async {
@@ -40,8 +54,15 @@ class _OTPScreenState extends State<OTPScreen> {
           await _auth.signInWithCredential(credential);
 
       if (userCredential.user != null) {
+        await _saveUserToMongoDB(
+            widget.phoneNumber); // Save to MongoDB after OTP verification
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (context) => HomeScreen()));
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                HomeScreen(phoneNumber: widget.phoneNumber), // Pass phoneNumber
+          ),
+        );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -54,6 +75,17 @@ class _OTPScreenState extends State<OTPScreen> {
   }
 
   @override
+  void dispose() {
+    for (var controller in _otpControllers) {
+      controller.dispose();
+    }
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -63,7 +95,6 @@ class _OTPScreenState extends State<OTPScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Header
               Text(
                 "Verify Your Number",
                 style: TextStyle(
@@ -81,15 +112,11 @@ class _OTPScreenState extends State<OTPScreen> {
                 ),
               ),
               SizedBox(height: 40),
-
-              // OTP Fields
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: List.generate(6, (index) => _buildOTPField(index)),
               ),
               SizedBox(height: 40),
-
-              // Verify Button
               SizedBox(
                 width: double.infinity,
                 height: 50,

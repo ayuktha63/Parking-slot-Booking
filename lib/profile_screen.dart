@@ -1,9 +1,11 @@
-// profile_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'phone_screen.dart'; // Import PhoneScreen for logout navigation
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -19,6 +21,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _bikeNumberController = TextEditingController();
   final TextEditingController _carNumberController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    _fetchProfile();
+  }
+
+  Future<void> _fetchProfile() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      final phoneNumber = user.phoneNumber!;
+      try {
+        final response = await http.get(
+          Uri.parse('http://localhost:3000/api/profile?phone=$phoneNumber'),
+        );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          setState(() {
+            _nameController.text = data['name'] ?? '';
+            _bikeNumberController.text = data['bike_number_plate'] ?? '';
+            _carNumberController.text = data['car_number_plate'] ?? '';
+          });
+        }
+      } catch (e) {
+        print('Error fetching profile: $e');
+        setState(() {
+          _nameController.text = '';
+          _bikeNumberController.text = '';
+          _carNumberController.text = '';
+        });
+      }
+    }
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -30,10 +65,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _updateProfile() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      final phoneNumber = user.phoneNumber!;
+      try {
+        final response = await http.put(
+          Uri.parse('http://localhost:3000/api/profile?phone=$phoneNumber'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'name': _nameController.text,
+            'bike_number_plate': _bikeNumberController.text,
+            'car_number_plate': _carNumberController.text,
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Profile updated")),
+          );
+          await _fetchProfile(); // Refresh UI with updated data
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Failed to update profile")),
+          );
+        }
+      } catch (e) {
+        print('Error updating profile: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error updating profile")),
+        );
+      }
+    }
+  }
+
   void _logout() async {
     await _auth.signOut();
-    // Navigate back to the initial screen (e.g., LoadingScreen or PhoneScreen)
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => PhoneScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -56,7 +128,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Profile Photo
             GestureDetector(
               onTap: _pickImage,
               child: Container(
@@ -89,8 +160,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 30),
-
-            // Phone Number (Read-only)
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -121,8 +190,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Name Input
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
@@ -136,8 +203,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Bike Number Input
             TextField(
               controller: _bikeNumberController,
               decoration: InputDecoration(
@@ -152,8 +217,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Car Number Input
             TextField(
               controller: _carNumberController,
               decoration: InputDecoration(
@@ -167,9 +230,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fillColor: Colors.white,
               ),
             ),
-            const SizedBox(height: 40),
-
-            // Logout Button
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _updateProfile,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3F51B5),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 5,
+                ),
+                child: Text(
+                  "Update Profile",
+                  style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               height: 50,

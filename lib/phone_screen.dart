@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
-import 'package:parking_booking/home_screen.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'home_screen.dart';
 import 'otp_screen.dart';
 
 // Define a consistent color scheme
-const primaryColor = Color(0xFF1E88E5); // Blue for parking theme
-const secondaryColor = Color(0xFFFFA726); // Orange accent
+const primaryColor = Color(0xFF1E88E5);
+const secondaryColor = Color(0xFFFFA726);
 const backgroundColor = Color(0xFFF5F7FA);
 const cardColor = Colors.white;
 
@@ -84,6 +86,27 @@ class _PhoneScreenState extends State<PhoneScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLoading = false;
 
+  Future<void> _saveUserToMongoDB(String phoneNumber) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:3000/api/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': phoneNumber,
+          'name': '',
+          'car_number_plate': '',
+          'bike_number_plate': '',
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        print('Failed to save user to MongoDB: ${response.body}');
+      }
+    } catch (e) {
+      print('Error saving user to MongoDB: $e');
+    }
+  }
+
   void _verifyPhone() async {
     setState(() => _isLoading = true);
     String phoneNumber = _phoneController.text.trim();
@@ -93,8 +116,14 @@ class _PhoneScreenState extends State<PhoneScreen> {
       timeout: const Duration(seconds: 60),
       verificationCompleted: (PhoneAuthCredential credential) async {
         await _auth.signInWithCredential(credential);
+        await _saveUserToMongoDB(phoneNumber); // Save to MongoDB
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (context) => HomeScreen()));
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                HomeScreen(phoneNumber: phoneNumber), // Pass phoneNumber
+          ),
+        );
       },
       verificationFailed: (FirebaseAuthException e) {
         setState(() => _isLoading = false);
@@ -110,7 +139,10 @@ class _PhoneScreenState extends State<PhoneScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => OTPScreen(verificationId: verificationId),
+            builder: (context) => OTPScreen(
+              verificationId: verificationId,
+              phoneNumber: phoneNumber, // Pass phoneNumber to OTPScreen
+            ),
           ),
         );
       },
@@ -147,15 +179,13 @@ class _PhoneScreenState extends State<PhoneScreen> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 60),
-                // Welcome Animation
                 Lottie.asset(
-                  'assets/lottie/parking_animation.json', // Add a parking-related Lottie animation
+                  'assets/lottie/parking_animation.json',
                   width: 200,
                   height: 200,
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 20),
-                // App Title
                 Text(
                   "Welcome to ParkEasy",
                   style: GoogleFonts.poppins(
@@ -183,8 +213,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 50),
-
-                // Phone Input Section
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -256,8 +284,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // Action Button
                 SizedBox(
                   width: double.infinity,
                   height: 55,

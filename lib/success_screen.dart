@@ -142,7 +142,7 @@ Please arrive 15 minutes before your booking time.
                       onPressed: () {
                         Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(builder: (context) => HomeScreen()),
+                          MaterialPageRoute(builder: (context) => HomeScreen(phoneNumber: '',)),
                           (route) => false,
                         );
                       },

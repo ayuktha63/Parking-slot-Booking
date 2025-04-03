@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:parking_booking/SuccessAnimationScreen.dart';
 import 'dart:convert';
-import 'SuccessAnimationScreen.dart';
 
 class BookingScreen extends StatefulWidget {
   final String location;
   final String parkingId;
 
-  const BookingScreen(
-      {super.key, required this.location, required this.parkingId});
+  const BookingScreen({
+    super.key,
+    required this.location,
+    required this.parkingId,
+  });
 
   @override
   _BookingScreenState createState() => _BookingScreenState();
@@ -53,6 +56,10 @@ class _BookingScreenState extends State<BookingScreen> {
           totalBikeSlots = data['total_bike_slots'] ?? 0;
           availableCarSlots = data['available_car_slots'] ?? 0;
           availableBikeSlots = data['available_bike_slots'] ?? 0;
+          bookedCarSlots =
+              totalCarSlots - availableCarSlots; // Calculate booked slots
+          bookedBikeSlots =
+              totalBikeSlots - availableBikeSlots; // Calculate booked slots
           // Filter vehicleTypes based on availability
           vehicleTypes = [];
           if (availableCarSlots > 0) vehicleTypes.add("Car");
@@ -61,9 +68,14 @@ class _BookingScreenState extends State<BookingScreen> {
         await _fetchAllSlots(); // Fetch slots to calculate booked counts
       } else {
         print('Failed to fetch parking area details: ${response.statusCode}');
+        _showErrorDialog(
+            "Failed to fetch parking details: ${response.statusCode}");
       }
     } catch (error) {
       print('Error fetching parking area details: $error');
+      _showErrorDialog("Error fetching parking details: $error");
+    } finally {
+      setState(() => isLoading = false);
     }
   }
 
@@ -117,6 +129,7 @@ class _BookingScreenState extends State<BookingScreen> {
       );
 
       try {
+        print('Attempting to book slots: $selectedSlotIds');
         for (String slotId in selectedSlotIds) {
           final response = await http.post(
             Uri.parse('http://localhost:3000/api/bookings'),
@@ -131,6 +144,8 @@ class _BookingScreenState extends State<BookingScreen> {
             }),
           );
 
+          print(
+              'Booking response for slot $slotId: ${response.statusCode}, ${response.body}');
           if (response.statusCode != 200) {
             print(
                 'Booking failed: Status ${response.statusCode}, Body: ${response.body}');
@@ -139,6 +154,7 @@ class _BookingScreenState extends State<BookingScreen> {
           }
         }
 
+        print('Booking successful, refreshing data');
         await _fetchParkingAreaDetails();
         await _fetchAllSlots();
 
@@ -147,13 +163,15 @@ class _BookingScreenState extends State<BookingScreen> {
           MaterialPageRoute(
             builder: (context) => SuccessAnimationScreen(
               location: widget.location,
-              date: startDate!,
-              time: startTime!,
+              date: startDate!, // Legacy
+              time: startTime!, // Legacy
               vehicleType: selectedVehicle!,
               slots: selectedSlotIds
                   .map((id) => allSlots.firstWhere(
                       (slot) => slot['_id'] == id)['slot_number'] as int)
                   .toList(),
+              entryDateTime: entryDateTime, // Added
+              exitDateTime: exitDateTime, // Added
             ),
           ),
         );
@@ -266,10 +284,10 @@ class _BookingScreenState extends State<BookingScreen> {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red),
-              const SizedBox(width: 8),
-              const Text("Booking Error"),
+            children: const [
+              Icon(Icons.error_outline, color: Colors.red),
+              SizedBox(width: 8),
+              Text("Booking Error"),
             ],
           ),
           content: Text(message),

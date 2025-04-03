@@ -125,7 +125,7 @@ app.put('/api/profile', async (req, res) => {
     }
 });
 
-// Get Parking Areas
+// Get All Parking Areas
 app.get('/api/parking_areas', async (req, res) => {
     const db = await dbPromise;
 
@@ -140,6 +140,30 @@ app.get('/api/parking_areas', async (req, res) => {
         res.json(parkingAreas);
     } catch (error) {
         console.error("Error fetching parking areas:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+});
+
+// Get Specific Parking Area by ID
+app.get('/api/parking_areas/:id', async (req, res) => {
+    const db = await dbPromise;
+    try {
+        console.log(`Fetching parking area with ID: ${req.params.id}`);
+        if (!ObjectId.isValid(req.params.id)) {
+            console.log(`Invalid parking area ID: ${req.params.id}`);
+            return res.status(400).json({ message: "Invalid parking area ID" });
+        }
+
+        const parkingId = new ObjectId(req.params.id);
+        const parkingArea = await db.collection('parking_areas').findOne({ _id: parkingId });
+        if (!parkingArea) {
+            console.log(`Parking area not found for ID: ${req.params.id}`);
+            return res.status(404).json({ message: "Parking area not found" });
+        }
+        console.log(`Parking area fetched:`, parkingArea);
+        res.json(parkingArea);
+    } catch (error) {
+        console.error(`Error fetching parking area ${req.params.id}:`, error);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 });
@@ -188,39 +212,65 @@ app.post('/api/parking_areas', async (req, res) => {
     }
 });
 
-// Get Available Slots
+// Get All Slots for a Parking Area
 app.get('/api/parking_areas/:id/slots', async (req, res) => {
     const db = await dbPromise;
-    const { entry_time, exit_time } = req.query;
+    const { vehicle_type } = req.query;
     const parkingId = new ObjectId(req.params.id);
 
-    let query = { parking_id: parkingId, status: "available" };
+    try {
+        console.log(`Fetching all slots for parking_id: ${req.params.id} with vehicle_type: ${vehicle_type}`);
 
-    if (entry_time && exit_time) {
-        const entryTime = new Date(entry_time);
-        const exitTime = new Date(exit_time);
+        if (!ObjectId.isValid(req.params.id)) {
+            console.log(`Invalid parking area ID: ${req.params.id}`);
+            return res.status(400).json({ message: "Invalid parking area ID" });
+        }
 
-        // Find slots that are not booked during the requested time range
-        const conflictingBookings = await db.collection('bookings')
-            .find({
-                parking_id: parkingId,
-                status: "active",
-                $or: [
-                    { entry_time: { $lt: exitTime }, exit_time: { $gt: entryTime } }
-                ]
-            })
+        // Validate parking area exists and get total slots
+        const parkingArea = await db.collection('parking_areas').findOne({ _id: parkingId });
+        if (!parkingArea) {
+            console.log(`Parking area not found for ID: ${req.params.id}`);
+            return res.status(404).json({ message: "Parking area not found" });
+        }
+        const expectedTotalSlots = vehicle_type && vehicle_type.toLowerCase() === "car" 
+            ? parkingArea.total_car_slots 
+            : vehicle_type && vehicle_type.toLowerCase() === "bike" 
+                ? parkingArea.total_bike_slots 
+                : parkingArea.total_car_slots + parkingArea.total_bike_slots;
+        console.log(`Expected total slots for ${vehicle_type || 'all'}: ${expectedTotalSlots}`);
+
+        // Fetch all slots
+        let query = { parking_id: parkingId };
+        if (vehicle_type) {
+            query.vehicle_type = vehicle_type.toLowerCase();
+        }
+        const slots = await db.collection('slots').find(query).toArray();
+        console.log(`Fetched ${slots.length} slots for parking_id ${req.params.id}`);
+
+        // Check if slot count matches expected total
+        if (slots.length !== expectedTotalSlots) {
+            console.warn(`Slot count mismatch: expected ${expectedTotalSlots}, found ${slots.length}`);
+        }
+
+        // Fetch active bookings
+        const activeBookings = await db.collection('bookings')
+            .find({ parking_id: parkingId, status: "active" })
             .toArray();
+        const bookedSlotIds = activeBookings.map(b => b.slot_id.toString());
+        console.log(`Active bookings found: ${activeBookings.length}, booked slot IDs:`, bookedSlotIds);
 
-        const bookedSlotIds = conflictingBookings.map(b => b.slot_id.toString());
-        query = {
-            parking_id: parkingId,
-            status: "available",
-            _id: { $nin: bookedSlotIds.map(id => new ObjectId(id)) }
-        };
+        // Add booking status to each slot
+        const slotsWithStatus = slots.map(slot => ({
+            ...slot,
+            is_booked: bookedSlotIds.includes(slot._id.toString())
+        }));
+
+        console.log(`Returning ${slotsWithStatus.length} slots with booking status`);
+        res.json(slotsWithStatus);
+    } catch (error) {
+        console.error(`Error fetching slots for parking_id ${req.params.id}:`, error);
+        res.status(500).json({ message: "Server error", error: error.message });
     }
-
-    const slots = await db.collection('slots').find(query).toArray();
-    res.json(slots);
 });
 
 // Debug Endpoint: Get All Slots (Available or Booked)
@@ -265,15 +315,13 @@ app.post('/api/bookings', async (req, res) => {
 
         const slot = await db.collection('slots').findOne({
             _id: new ObjectId(slot_id),
-            status: "available",
             vehicle_type: vehicle_type.toLowerCase()
         });
 
         if (!slot) {
-            console.log(`Slot not available or mismatched vehicle type for slot_id: ${slot_id}`);
-            return res.status(400).json({ message: "Slot not available or mismatched vehicle type" });
+            console.log(`Slot not found or mismatched vehicle type for slot_id: ${slot_id}`);
+            return res.status(400).json({ message: "Slot not found or mismatched vehicle type" });
         }
-        console.log(`Slot found:`, slot);
 
         const entryDate = new Date(entry_time);
         const exitDate = exit_time ? new Date(exit_time) : null;

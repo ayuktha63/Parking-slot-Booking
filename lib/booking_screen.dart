@@ -23,55 +23,67 @@ class _BookingScreenState extends State<BookingScreen> {
   Set<String> selectedSlotIds = {};
   final TextEditingController _vehicleNumberController =
       TextEditingController();
-  List<dynamic> availableSlots = [];
+  List<dynamic> allSlots = [];
   bool isLoading = true;
+  int totalCarSlots = 0;
+  int totalBikeSlots = 0;
+  int availableCarSlots = 0;
+  int bookedCarSlots = 0;
+  int availableBikeSlots = 0;
+  int bookedBikeSlots = 0;
 
   List<String> vehicleTypes = ["Car", "Bike"];
 
   @override
   void initState() {
     super.initState();
-    _fetchAvailableSlots();
+    _fetchParkingAreaDetails();
   }
 
-  Future<void> _fetchAvailableSlots() async {
+  Future<void> _fetchParkingAreaDetails() async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+            'http://localhost:3000/api/parking_areas/${widget.parkingId}'),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          totalCarSlots = data['total_car_slots'] ?? 0;
+          totalBikeSlots = data['total_bike_slots'] ?? 0;
+          availableCarSlots = data['available_car_slots'] ?? 0;
+          bookedCarSlots = data['booked_car_slots'] ?? 0;
+          availableBikeSlots = data['available_bike_slots'] ?? 0;
+          bookedBikeSlots = data['booked_bike_slots'] ?? 0;
+        });
+        if (selectedVehicle != null) {
+          _fetchAllSlots();
+        }
+      } else {
+        print('Failed to fetch parking area details: ${response.statusCode}');
+      }
+    } catch (error) {
+      print('Error fetching parking area details: $error');
+    }
+  }
+
+  Future<void> _fetchAllSlots() async {
+    if (selectedVehicle == null) return;
+
     setState(() => isLoading = true);
     try {
-      String url =
-          'http://localhost:3000/api/parking_areas/${widget.parkingId}/slots';
-      if (startDate != null && startTime != null) {
-        final entryDateTime = DateTime(
-          startDate!.year,
-          startDate!.month,
-          startDate!.day,
-          startTime!.hour,
-          startTime!.minute,
-        );
-        url += '?entry_time=${entryDateTime.toIso8601String()}';
-        if (endDate != null && endTime != null) {
-          final exitDateTime = DateTime(
-            endDate!.year,
-            endDate!.month,
-            endDate!.day,
-            endTime!.hour,
-            endTime!.minute,
-          );
-          url += '&exit_time=${exitDateTime.toIso8601String()}';
-        }
-      }
-
+      final url =
+          'http://localhost:3000/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
       final response = await http.get(Uri.parse(url));
-
       if (response.statusCode == 200) {
         setState(() {
-          availableSlots = jsonDecode(response.body);
+          allSlots = jsonDecode(response.body);
           isLoading = false;
         });
       } else {
         print(
             'Failed to load slots: Status ${response.statusCode}, Body: ${response.body}');
-        _showErrorDialog(
-            "Failed to load available slots: ${response.statusCode} - ${response.body}");
+        _showErrorDialog("Failed to load slots: ${response.statusCode}");
         setState(() => isLoading = false);
       }
     } catch (error) {
@@ -127,6 +139,9 @@ class _BookingScreenState extends State<BookingScreen> {
           }
         }
 
+        await _fetchParkingAreaDetails();
+        await _fetchAllSlots();
+
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -136,7 +151,7 @@ class _BookingScreenState extends State<BookingScreen> {
               time: startTime!,
               vehicleType: selectedVehicle!,
               slots: selectedSlotIds
-                  .map((id) => availableSlots.firstWhere(
+                  .map((id) => allSlots.firstWhere(
                       (slot) => slot['_id'] == id)['slot_number'] as int)
                   .toList(),
             ),
@@ -171,10 +186,7 @@ class _BookingScreenState extends State<BookingScreen> {
       },
     );
     if (picked != null) {
-      setState(() {
-        startDate = picked;
-        _fetchAvailableSlots(); // Refresh slots with new time
-      });
+      setState(() => startDate = picked);
     }
   }
 
@@ -196,10 +208,7 @@ class _BookingScreenState extends State<BookingScreen> {
       },
     );
     if (picked != null) {
-      setState(() {
-        startTime = picked;
-        _fetchAvailableSlots(); // Refresh slots with new time
-      });
+      setState(() => startTime = picked);
     }
   }
 
@@ -223,10 +232,7 @@ class _BookingScreenState extends State<BookingScreen> {
       },
     );
     if (picked != null) {
-      setState(() {
-        endDate = picked;
-        _fetchAvailableSlots(); // Refresh slots with new time
-      });
+      setState(() => endDate = picked);
     }
   }
 
@@ -248,10 +254,7 @@ class _BookingScreenState extends State<BookingScreen> {
       },
     );
     if (picked != null) {
-      setState(() {
-        endTime = picked;
-        _fetchAvailableSlots(); // Refresh slots with new time
-      });
+      setState(() => endTime = picked);
     }
   }
 
@@ -264,16 +267,17 @@ class _BookingScreenState extends State<BookingScreen> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              Icon(Icons.error_outline, color: Colors.red),
-              SizedBox(width: 8),
-              Text("Booking Error"),
+              const Icon(Icons.error_outline, color: Colors.red),
+              const SizedBox(width: 8),
+              const Text("Booking Error"),
             ],
           ),
           content: Text(message),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text("OK", style: TextStyle(color: Color(0xFF3F51B5))),
+              child:
+                  const Text("OK", style: TextStyle(color: Color(0xFF3F51B5))),
             ),
           ],
         );
@@ -301,8 +305,8 @@ class _BookingScreenState extends State<BookingScreen> {
           children: [
             Container(
               width: double.infinity,
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
                 color: Color(0xFF3F51B5),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
@@ -314,13 +318,13 @@ class _BookingScreenState extends State<BookingScreen> {
                 children: [
                   Text(
                     "Book at ${widget.location}",
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     "Reserve your parking space now",
                     style: TextStyle(
@@ -328,16 +332,26 @@ class _BookingScreenState extends State<BookingScreen> {
                       fontSize: 14,
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSlotCount(Icons.directions_car, "Cars",
+                          availableCarSlots, bookedCarSlots),
+                      _buildSlotCount(Icons.motorcycle, "Bikes",
+                          availableBikeSlots, bookedBikeSlots),
+                    ],
+                  ),
                 ],
               ),
             ),
             Padding(
-              padding: EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSectionTitle("Parking Details"),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -346,18 +360,19 @@ class _BookingScreenState extends State<BookingScreen> {
                         BoxShadow(
                           color: Colors.black.withOpacity(0.05),
                           blurRadius: 10,
-                          offset: Offset(0, 4),
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
                     child: Padding(
-                      padding: EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
                           DropdownButtonFormField<String>(
                             decoration: InputDecoration(
                               labelText: "Select Vehicle Type",
-                              labelStyle: TextStyle(color: Color(0xFF3F51B5)),
+                              labelStyle:
+                                  const TextStyle(color: Color(0xFF3F51B5)),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide:
@@ -371,9 +386,9 @@ class _BookingScreenState extends State<BookingScreen> {
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide:
-                                    BorderSide(color: Color(0xFF3F51B5)),
+                                    const BorderSide(color: Color(0xFF3F51B5)),
                               ),
-                              prefixIcon: Icon(Icons.directions_car,
+                              prefixIcon: const Icon(Icons.directions_car,
                                   color: Color(0xFF3F51B5)),
                               filled: true,
                               fillColor: Colors.white,
@@ -388,14 +403,14 @@ class _BookingScreenState extends State<BookingScreen> {
                             onChanged: (value) => setState(() {
                               selectedVehicle = value;
                               selectedSlotIds.clear();
-                              _fetchAvailableSlots();
+                              _fetchAllSlots();
                             }),
                             dropdownColor: Colors.white,
-                            icon: Icon(Icons.arrow_drop_down,
+                            icon: const Icon(Icons.arrow_drop_down,
                                 color: Color(0xFF3F51B5)),
                           ),
                           if (selectedVehicle != null) ...[
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             TextField(
                               controller: _vehicleNumberController,
                               decoration: InputDecoration(
@@ -403,13 +418,12 @@ class _BookingScreenState extends State<BookingScreen> {
                                     ? "Car Number Plate"
                                     : "Bike Number Plate",
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                                    borderRadius: BorderRadius.circular(12)),
                                 prefixIcon: Icon(
                                   selectedVehicle == "Car"
                                       ? Icons.directions_car
                                       : Icons.motorcycle,
-                                  color: Color(0xFF3F51B5),
+                                  color: const Color(0xFF3F51B5),
                                 ),
                                 filled: true,
                                 fillColor: Colors.grey[100],
@@ -420,9 +434,9 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
                   _buildSectionTitle("Entry & Exit Timing"),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -431,7 +445,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         BoxShadow(
                           color: Colors.black.withOpacity(0.05),
                           blurRadius: 10,
-                          offset: Offset(0, 4),
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
@@ -440,7 +454,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         InkWell(
                           onTap: () => _selectStartDate(context),
                           child: Container(
-                            padding: EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               border: Border(
                                   bottom: BorderSide(color: Colors.grey[200]!)),
@@ -448,15 +462,16 @@ class _BookingScreenState extends State<BookingScreen> {
                             child: Row(
                               children: [
                                 Container(
-                                  padding: EdgeInsets.all(10),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Color(0xFF3F51B5).withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5)
+                                        .withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Icon(Icons.calendar_today,
+                                  child: const Icon(Icons.calendar_today,
                                       color: Color(0xFF3F51B5)),
                                 ),
-                                SizedBox(width: 16),
+                                const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -468,19 +483,19 @@ class _BookingScreenState extends State<BookingScreen> {
                                             fontSize: 14,
                                             color: Colors.grey[600]),
                                       ),
-                                      SizedBox(height: 4),
+                                      const SizedBox(height: 4),
                                       Text(
                                         startDate != null
                                             ? "${startDate!.day}/${startDate!.month}/${startDate!.year}"
                                             : "Select Entry Date",
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                Icon(Icons.arrow_forward_ios,
+                                const Icon(Icons.arrow_forward_ios,
                                     size: 16, color: Colors.grey),
                               ],
                             ),
@@ -489,7 +504,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         InkWell(
                           onTap: () => _selectStartTime(context),
                           child: Container(
-                            padding: EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               border: Border(
                                   bottom: BorderSide(color: Colors.grey[200]!)),
@@ -497,15 +512,16 @@ class _BookingScreenState extends State<BookingScreen> {
                             child: Row(
                               children: [
                                 Container(
-                                  padding: EdgeInsets.all(10),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Color(0xFF3F51B5).withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5)
+                                        .withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Icon(Icons.access_time,
+                                  child: const Icon(Icons.access_time,
                                       color: Color(0xFF3F51B5)),
                                 ),
-                                SizedBox(width: 16),
+                                const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -517,19 +533,19 @@ class _BookingScreenState extends State<BookingScreen> {
                                             fontSize: 14,
                                             color: Colors.grey[600]),
                                       ),
-                                      SizedBox(height: 4),
+                                      const SizedBox(height: 4),
                                       Text(
                                         startTime != null
                                             ? startTime!.format(context)
                                             : "Select Entry Time",
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                Icon(Icons.arrow_forward_ios,
+                                const Icon(Icons.arrow_forward_ios,
                                     size: 16, color: Colors.grey),
                               ],
                             ),
@@ -538,7 +554,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         InkWell(
                           onTap: () => _selectEndDate(context),
                           child: Container(
-                            padding: EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               border: Border(
                                   bottom: BorderSide(color: Colors.grey[200]!)),
@@ -546,15 +562,16 @@ class _BookingScreenState extends State<BookingScreen> {
                             child: Row(
                               children: [
                                 Container(
-                                  padding: EdgeInsets.all(10),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Color(0xFF3F51B5).withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5)
+                                        .withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Icon(Icons.calendar_today,
+                                  child: const Icon(Icons.calendar_today,
                                       color: Color(0xFF3F51B5)),
                                 ),
-                                SizedBox(width: 16),
+                                const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -566,19 +583,19 @@ class _BookingScreenState extends State<BookingScreen> {
                                             fontSize: 14,
                                             color: Colors.grey[600]),
                                       ),
-                                      SizedBox(height: 4),
+                                      const SizedBox(height: 4),
                                       Text(
                                         endDate != null
                                             ? "${endDate!.day}/${endDate!.month}/${endDate!.year}"
                                             : "Select Exit Date",
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                Icon(Icons.arrow_forward_ios,
+                                const Icon(Icons.arrow_forward_ios,
                                     size: 16, color: Colors.grey),
                               ],
                             ),
@@ -587,19 +604,20 @@ class _BookingScreenState extends State<BookingScreen> {
                         InkWell(
                           onTap: () => _selectEndTime(context),
                           child: Container(
-                            padding: EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
                                 Container(
-                                  padding: EdgeInsets.all(10),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Color(0xFF3F51B5).withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5)
+                                        .withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Icon(Icons.access_time,
+                                  child: const Icon(Icons.access_time,
                                       color: Color(0xFF3F51B5)),
                                 ),
-                                SizedBox(width: 16),
+                                const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -611,19 +629,19 @@ class _BookingScreenState extends State<BookingScreen> {
                                             fontSize: 14,
                                             color: Colors.grey[600]),
                                       ),
-                                      SizedBox(height: 4),
+                                      const SizedBox(height: 4),
                                       Text(
                                         endTime != null
                                             ? endTime!.format(context)
                                             : "Select Exit Time",
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                Icon(Icons.arrow_forward_ios,
+                                const Icon(Icons.arrow_forward_ios,
                                     size: 16, color: Colors.grey),
                               ],
                             ),
@@ -632,11 +650,11 @@ class _BookingScreenState extends State<BookingScreen> {
                       ],
                     ),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
                   _buildSectionTitle("Select Parking Slots"),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Container(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
@@ -644,7 +662,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         BoxShadow(
                           color: Colors.black.withOpacity(0.05),
                           blurRadius: 10,
-                          offset: Offset(0, 4),
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
@@ -655,100 +673,107 @@ class _BookingScreenState extends State<BookingScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _buildLegendItem(Colors.grey[300]!, "Available"),
-                            _buildLegendItem(Color(0xFF4CAF50), "Selected"),
-                            _buildLegendItem(Colors.red[300]!, "Occupied"),
+                            _buildLegendItem(
+                                const Color(0xFF4CAF50), "Selected"),
+                            _buildLegendItem(Colors.red[300]!, "Booked"),
                           ],
                         ),
-                        SizedBox(height: 20),
+                        const SizedBox(height: 20),
                         isLoading
-                            ? Center(child: CircularProgressIndicator())
-                            : availableSlots.isEmpty
-                                ? Center(child: Text("No available slots"))
-                                : Wrap(
-                                    spacing: 10.0,
-                                    runSpacing: 10.0,
-                                    children: availableSlots
-                                        .where((slot) =>
-                                            selectedVehicle == null ||
-                                            slot['vehicle_type']
-                                                    .toLowerCase() ==
-                                                selectedVehicle!.toLowerCase())
-                                        .map((slot) {
-                                      final slotId = slot['_id'];
-                                      final slotNumber = slot['slot_number'];
-                                      final isSelected =
-                                          selectedSlotIds.contains(slotId);
-                                      final isOccupied =
-                                          slot['status'] == 'booked';
+                            ? const Center(child: CircularProgressIndicator())
+                            : selectedVehicle == null
+                                ? const Center(
+                                    child: Text("Please select a vehicle type"))
+                                : allSlots.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                            "No slots found for this vehicle type"))
+                                    : Wrap(
+                                        spacing: 10.0,
+                                        runSpacing: 10.0,
+                                        children: allSlots.map((slot) {
+                                          final slotId = slot['_id'];
+                                          final slotNumber =
+                                              slot['slot_number'];
+                                          final isSelected =
+                                              selectedSlotIds.contains(slotId);
+                                          final isBooked =
+                                              slot['is_booked'] == true;
 
-                                      return GestureDetector(
-                                        onTap: isOccupied
-                                            ? null
-                                            : () {
-                                                setState(() {
-                                                  if (isSelected) {
-                                                    selectedSlotIds
-                                                        .remove(slotId);
-                                                  } else {
-                                                    selectedSlotIds.add(slotId);
-                                                  }
-                                                });
-                                              },
-                                        child: AnimatedContainer(
-                                          duration: Duration(milliseconds: 200),
-                                          width: 65,
-                                          height: 65,
-                                          decoration: BoxDecoration(
-                                            color: isOccupied
-                                                ? Colors.red[300]
-                                                : isSelected
-                                                    ? Color(0xFF4CAF50)
-                                                    : Colors.grey[300],
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            boxShadow: isSelected
-                                                ? [
-                                                    BoxShadow(
-                                                      color: Color(0xFF4CAF50)
-                                                          .withOpacity(0.4),
-                                                      blurRadius: 8,
-                                                      offset: Offset(0, 2),
-                                                    )
-                                                  ]
-                                                : [],
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              "$slotNumber",
-                                              style: TextStyle(
-                                                color: isOccupied || isSelected
-                                                    ? Colors.white
-                                                    : Colors.black,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
+                                          return GestureDetector(
+                                            onTap: isBooked
+                                                ? null
+                                                : () {
+                                                    setState(() {
+                                                      if (isSelected) {
+                                                        selectedSlotIds
+                                                            .remove(slotId);
+                                                      } else {
+                                                        selectedSlotIds
+                                                            .add(slotId);
+                                                      }
+                                                    });
+                                                  },
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                  milliseconds: 200),
+                                              width: 65,
+                                              height: 65,
+                                              decoration: BoxDecoration(
+                                                color: isBooked
+                                                    ? Colors.red[300]
+                                                    : isSelected
+                                                        ? const Color(
+                                                            0xFF4CAF50)
+                                                        : Colors.grey[300],
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                boxShadow: isSelected
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: const Color(
+                                                                  0xFF4CAF50)
+                                                              .withOpacity(0.4),
+                                                          blurRadius: 8,
+                                                          offset: const Offset(
+                                                              0, 2),
+                                                        )
+                                                      ]
+                                                    : [],
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  "$slotNumber",
+                                                  style: TextStyle(
+                                                    color:
+                                                        isBooked || isSelected
+                                                            ? Colors.white
+                                                            : Colors.black,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
+                                          );
+                                        }).toList(),
+                                      ),
                       ],
                     ),
                   ),
-                  SizedBox(height: 40),
+                  const SizedBox(height: 40),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Color(0xFF3F51B5),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: const Color(0xFF3F51B5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       onPressed: _confirmBooking,
-                      child: Text(
+                      child: const Text(
                         "Confirm Booking",
                         style: TextStyle(
                           fontSize: 18,
@@ -757,7 +782,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(height: 30),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -774,14 +799,14 @@ class _BookingScreenState extends State<BookingScreen> {
           width: 4,
           height: 20,
           decoration: BoxDecoration(
-            color: Color(0xFF3F51B5),
+            color: const Color(0xFF3F51B5),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        SizedBox(width: 8),
+        const SizedBox(width: 8),
         Text(
           title,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: Color(0xFF303030),
@@ -802,15 +827,47 @@ class _BookingScreenState extends State<BookingScreen> {
             borderRadius: BorderRadius.circular(4),
           ),
         ),
-        SizedBox(width: 6),
+        const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
       ],
+    );
+  }
+
+  Widget _buildSlotCount(
+      IconData icon, String label, int available, int booked) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.white),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "$available / ${available + booked}",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                "$label (Avail/Total)",
+                style: TextStyle(
+                    fontSize: 12, color: Colors.white.withOpacity(0.85)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

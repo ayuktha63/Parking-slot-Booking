@@ -238,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => BookingScreen(location: location),
+        builder: (context) => BookingScreen(location: location, parkingId: '',),
       ),
     );
   }

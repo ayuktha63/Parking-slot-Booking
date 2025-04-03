@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'booking_screen.dart';
 import 'profile_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
   final String phoneNumber;
@@ -34,7 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
         List<Map<String, dynamic>> tempPlaces = [];
 
         for (var area in data) {
-          // Fetch actual slot counts for this parking area
           final carSlotsResponse = await http.get(Uri.parse(
               'http://localhost:3000/api/parking_areas/${area['_id']}/slots?vehicle_type=car'));
           final bikeSlotsResponse = await http.get(Uri.parse(
@@ -66,6 +66,8 @@ class _HomeScreenState extends State<HomeScreen> {
             "name": area['name'],
             "cars": availableCars,
             "bikes": availableBikes,
+            "lat": area['location']['lat'].toDouble(), // Fetch latitude
+            "lng": area['location']['lng'].toDouble(), // Fetch longitude
           });
         }
 
@@ -104,6 +106,18 @@ class _HomeScreenState extends State<HomeScreen> {
             .toList();
       }
     });
+  }
+
+  Future<void> _openGoogleMaps(double lat, double lng) async {
+    final url =
+        Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not open Google Maps")),
+      );
+    }
   }
 
   @override
@@ -211,13 +225,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildParkingCard(BuildContext context, Map<String, dynamic> place) {
-    // Check if slots are 0 and display "Full"
     final carSlotsText = place["cars"] == 0 ? "Full" : place["cars"].toString();
     final bikeSlotsText =
         place["bikes"] == 0 ? "Full" : place["bikes"].toString();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(
+          bottom: 16), // Fixed typo from 'custom' to 'bottom'
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -267,13 +281,32 @@ class _HomeScreenState extends State<HomeScreen> {
                   value: bikeSlotsText,
                   label: "Bikes",
                 ),
-                ElevatedButton(
-                  onPressed: () => _navigateToBookingScreen(context, place),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                  ),
-                  child: const Text("Book Now"),
+                Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => _navigateToBookingScreen(context, place),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        backgroundColor: const Color(0xFF3F51B5),
+                      ),
+                      child: const Text("Book Now"),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () =>
+                          _openGoogleMaps(place["lat"], place["lng"]),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        side: const BorderSide(color: Color(0xFF3F51B5)),
+                      ),
+                      child: const Text(
+                        "Get Location",
+                        style: TextStyle(color: Color(0xFF3F51B5)),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

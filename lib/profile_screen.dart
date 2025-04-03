@@ -1,10 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart'; // For MediaType
 import 'dart:convert';
+import 'dart:typed_data'; // For Uint8List
 import 'phone_screen.dart'; // Import PhoneScreen for logout navigation
 
 class ProfileScreen extends StatefulWidget {
@@ -16,7 +17,9 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  File? _profileImage;
+  XFile? _profileImageFile;
+  Uint8List? _profileImageBytes;
+  String? _profileImageUrl;
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _bikeNumberController = TextEditingController();
   final TextEditingController _carNumberController = TextEditingController();
@@ -29,83 +32,155 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _fetchProfile() async {
     final user = _auth.currentUser;
-    if (user != null) {
-      final phoneNumber = user.phoneNumber!;
-      try {
-        final response = await http.get(
-          Uri.parse('http://localhost:3000/api/profile?phone=$phoneNumber'),
-        );
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          setState(() {
-            _nameController.text = data['name'] ?? '';
-            _bikeNumberController.text = data['bike_number_plate'] ?? '';
-            _carNumberController.text = data['car_number_plate'] ?? '';
-          });
-        }
-      } catch (e) {
-        print('Error fetching profile: $e');
+    if (user == null) {
+      print('No user logged in');
+      return;
+    }
+
+    final phoneNumber = user.phoneNumber!;
+    try {
+      final response = await http.get(
+        Uri.parse('http://localhost:3000/api/profile?phone=$phoneNumber'),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _nameController.text = data['name'] ?? '';
+          _bikeNumberController.text = data['bike_number_plate'] ?? '';
+          _carNumberController.text = data['car_number_plate'] ?? '';
+          _profileImageUrl = data['profile_image'];
+          _profileImageFile = null;
+          _profileImageBytes = null;
+        });
+      } else {
+        print(
+            'Failed to fetch profile: ${response.statusCode} - ${response.body}');
         setState(() {
           _nameController.text = '';
           _bikeNumberController.text = '';
           _carNumberController.text = '';
+          _profileImageUrl = null;
         });
       }
+    } catch (e) {
+      print('Error fetching profile: $e');
+      setState(() {
+        _nameController.text = '';
+        _bikeNumberController.text = '';
+        _carNumberController.text = '';
+        _profileImageUrl = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load profile: $e')),
+      );
     }
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-    if (pickedFile != null) {
-      setState(() {
-        _profileImage = File(pickedFile.path);
-      });
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _profileImageFile = pickedFile;
+          _profileImageBytes = bytes;
+          _profileImageUrl = null;
+        });
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick image: $e')),
+      );
     }
   }
 
   Future<void> _updateProfile() async {
     final user = _auth.currentUser;
-    if (user != null) {
-      final phoneNumber = user.phoneNumber!;
-      try {
-        final response = await http.put(
-          Uri.parse('http://localhost:3000/api/profile?phone=$phoneNumber'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'name': _nameController.text,
-            'bike_number_plate': _bikeNumberController.text,
-            'car_number_plate': _carNumberController.text,
-          }),
-        );
+    if (user == null) {
+      print('No user logged in');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please log in to update your profile')),
+      );
+      return;
+    }
 
-        if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Profile updated")),
-          );
-          await _fetchProfile(); // Refresh UI with updated data
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Failed to update profile")),
-          );
+    final phoneNumber = user.phoneNumber!;
+    try {
+      var request = http.MultipartRequest(
+        'PUT',
+        Uri.parse('http://localhost:3000/api/profile?phone=$phoneNumber'),
+      );
+
+      request.fields['name'] = _nameController.text;
+      request.fields['bike_number_plate'] = _bikeNumberController.text;
+      request.fields['car_number_plate'] = _carNumberController.text;
+
+      if (_profileImageBytes != null) {
+        String filename = _profileImageFile?.name ?? 'profile_image.jpg';
+        if (!filename.toLowerCase().endsWith('.jpg') &&
+            !filename.toLowerCase().endsWith('.jpeg') &&
+            !filename.toLowerCase().endsWith('.png')) {
+          filename = 'profile_image.jpg';
         }
-      } catch (e) {
-        print('Error updating profile: $e');
+        String mimeType = filename.toLowerCase().endsWith('.png')
+            ? 'image/png'
+            : 'image/jpeg';
+        print(
+            'Uploading file: $filename, MIME type: $mimeType, bytes length: ${_profileImageBytes!.length}');
+        request.files.add(http.MultipartFile.fromBytes(
+          'profile_image',
+          _profileImageBytes!,
+          filename: filename,
+          contentType: MediaType.parse(mimeType),
+        ));
+      } else {
+        print('No image selected for upload');
+      }
+
+      var response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error updating profile")),
+          SnackBar(content: Text("Profile updated successfully")),
+        );
+        await _fetchProfile();
+      } else {
+        print(
+            'Failed to update profile: ${response.statusCode} - $responseBody');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to update profile: ${response.statusCode} - ${jsonDecode(responseBody)['message'] ?? 'Unknown error'}',
+            ),
+          ),
         );
       }
+    } catch (e) {
+      print('Error updating profile: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating profile: $e')),
+      );
     }
   }
 
   void _logout() async {
-    await _auth.signOut();
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => PhoneScreen()),
-      (route) => false,
-    );
+    try {
+      await _auth.signOut();
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => PhoneScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      print('Error logging out: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error logging out: $e')),
+      );
+    }
   }
 
   @override
@@ -145,9 +220,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: CircleAvatar(
                   radius: 60,
                   backgroundColor: Colors.grey[300],
-                  backgroundImage:
-                      _profileImage != null ? FileImage(_profileImage!) : null,
-                  child: _profileImage == null
+                  backgroundImage: _profileImageBytes != null
+                      ? MemoryImage(_profileImageBytes!)
+                      : _profileImageUrl != null
+                          ? NetworkImage(_profileImageUrl!)
+                          : null,
+                  child: _profileImageBytes == null && _profileImageUrl == null
                       ? Icon(Icons.camera_alt,
                           size: 40, color: Colors.grey[600])
                       : null,

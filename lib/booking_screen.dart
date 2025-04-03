@@ -52,13 +52,13 @@ class _BookingScreenState extends State<BookingScreen> {
           totalCarSlots = data['total_car_slots'] ?? 0;
           totalBikeSlots = data['total_bike_slots'] ?? 0;
           availableCarSlots = data['available_car_slots'] ?? 0;
-          bookedCarSlots = data['booked_car_slots'] ?? 0;
           availableBikeSlots = data['available_bike_slots'] ?? 0;
-          bookedBikeSlots = data['booked_bike_slots'] ?? 0;
+          // Filter vehicleTypes based on availability
+          vehicleTypes = [];
+          if (availableCarSlots > 0) vehicleTypes.add("Car");
+          if (availableBikeSlots > 0) vehicleTypes.add("Bike");
         });
-        if (selectedVehicle != null) {
-          _fetchAllSlots();
-        }
+        await _fetchAllSlots(); // Fetch slots to calculate booked counts
       } else {
         print('Failed to fetch parking area details: ${response.statusCode}');
       }
@@ -400,14 +400,18 @@ class _BookingScreenState extends State<BookingScreen> {
                                 child: Text(vehicle),
                               );
                             }).toList(),
-                            onChanged: (value) => setState(() {
-                              selectedVehicle = value;
-                              selectedSlotIds.clear();
-                              _fetchAllSlots();
-                            }),
+                            onChanged: vehicleTypes.isEmpty
+                                ? null // Disable dropdown if no options
+                                : (value) => setState(() {
+                                      selectedVehicle = value;
+                                      selectedSlotIds.clear();
+                                      _fetchAllSlots();
+                                    }),
                             dropdownColor: Colors.white,
                             icon: const Icon(Icons.arrow_drop_down,
                                 color: Color(0xFF3F51B5)),
+                            disabledHint:
+                                const Text("No available vehicle types"),
                           ),
                           if (selectedVehicle != null) ...[
                             const SizedBox(height: 16),

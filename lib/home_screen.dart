@@ -211,6 +211,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildParkingCard(BuildContext context, Map<String, dynamic> place) {
+    // Check if slots are 0 and display "Full"
+    final carSlotsText = place["cars"] == 0 ? "Full" : place["cars"].toString();
+    final bikeSlotsText =
+        place["bikes"] == 0 ? "Full" : place["bikes"].toString();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -254,12 +259,12 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildInfoItem(
                   icon: Icons.directions_car,
-                  value: place["cars"].toString(),
+                  value: carSlotsText,
                   label: "Cars",
                 ),
                 _buildInfoItem(
                   icon: Icons.motorcycle,
-                  value: place["bikes"].toString(),
+                  value: bikeSlotsText,
                   label: "Bikes",
                 ),
                 ElevatedButton(

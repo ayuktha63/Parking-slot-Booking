@@ -1,0 +1,175 @@
+Uncaught:
+SyntaxError: Missing semicolon. (2:3)
+
+  1 | // Switch to ParkingSystem database
+> 2 | use ParkingSystem
+    |    ^
+  3 |
+  4 | // Drop existing collections to start fresh (optional, remove if you want to append)
+  5 | db.users.drop()
+
+ParkingSystem> 
+... // Drop existing collections to start fresh (optional, remove if you want to append)
+... db.users.drop()
+... db.parking_areas.drop()
+... db.slots.drop()
+... db.bookings.drop()
+... 
+... // Create and populate users collection
+... db.createCollection("users")
+... db.users.insertOne({
+...     phone: "+11234567890",
+...     name: "Jane Doe",
+...     car_number_plate: "DEF456",
+...     bike_number_plate: "MNO123",
+...     profile_image: "",
+...     createdAt: new Date(),
+...     updatedAt: null
+... })
+... 
+... // Create and populate parking_areas collection
+... db.createCollection("parking_areas")
+... db.parking_areas.insertOne({
+...     name: "City Center Parking",
+...     location: { lat: 51.5074, lng: -0.1278 }, // Example: London coordinates
+...     total_car_slots: 10,
+...     available_car_slots: 10,
+...     booked_car_slots: 0,
+...     total_bike_slots: 10,
+...     available_bike_slots: 10,
+...     booked_bike_slots: 0
+... })
+... 
+... // Create and populate slots collection
+... db.createCollection("slots")
+... let parkingId = db.parking_areas.findOne({ name: "City Center Parking" })._id;
+... 
+... // Insert 10 car slots, all available
+... db.slots.insertMany(
+...     Array.from({ length: 10 }, (_, i) => ({
+...         parking_id: parkingId,
+...         slot_number: i + 1,
+...         vehicle_type: "car",
+...         status: "available",
+...         current_booking_id: null
+...     }))
+... )
+... 
+... // Insert 10 bike slots, all available
+... db.slots.insertMany(
+...     Array.from({ length: 10 }, (_, i) => ({
+...         parking_id: parkingId,
+...         slot_number: i + 1,
+...         vehicle_type: "bike",
+...         status: "available",
+...         current_booking_id: null
+...     }))
+... )
+... 
+... // Create bookings collection (empty since nothing is booked)
+... db.createCollection("bookings")
+{ ok: 1 }
+ParkingSystem> 
+... 
+... // Drop existing collections to start fresh (optional, remove if appending)
+... db.users.drop()
+... db.parking_areas.drop()
+... db.slots.drop()
+... db.bookings.drop()
+... 
+... 
+... // Create and populate parking_areas collection (5 Kerala-inspired parking areas)
+... db.createCollection("parking_areas")
+... db.parking_areas.insertMany([
+...     {
+...         name: "Kochi Metro Parking",
+...         location: { lat: 9.9312, lng: 76.2673 }, // Kochi
+...         total_car_slots: 15,
+...         available_car_slots: 15,
+...         booked_car_slots: 0,
+...         total_bike_slots: 20,
+...         available_bike_slots: 20,
+...         booked_bike_slots: 0
+...     },
+...     {
+...         name: "Trivandrum Central Parking",
+...         location: { lat: 8.5241, lng: 76.9366 }, // Thiruvananthapuram
+...         total_car_slots: 12,
+...         available_car_slots: 12,
+...         booked_car_slots: 0,
+...         total_bike_slots: 8,
+...         available_bike_slots: 8,
+...         booked_bike_slots: 0
+...     },
+...     {
+...         name: "Kozhikode Beach Parking",
+...         location: { lat: 11.2588, lng: 75.7804 }, // Kozhikode
+...         total_car_slots: 8,
+...         available_car_slots: 8,
+...         booked_car_slots: 0,
+...         total_bike_slots: 15,
+...         available_bike_slots: 15,
+...         booked_bike_slots: 0
+...     },
+...     {
+...         name: "Thrissur Railway Parking",
+...         location: { lat: 10.5276, lng: 76.2144 }, // Thrissur
+...         total_car_slots: 20,
+...         available_car_slots: 20,
+...         booked_car_slots: 0,
+...         total_bike_slots: 10,
+...         available_bike_slots: 10,
+...         booked_bike_slots: 0
+...     },
+...     {
+...         name: "Alappuzha Backwater Parking",
+...         location: { lat: 9.4981, lng: 76.3388 }, // Alappuzha
+...         total_car_slots: 5,
+...         available_car_slots: 5,
+...         booked_car_slots: 0,
+...         total_bike_slots: 12,
+...         available_bike_slots: 12,
+...         booked_bike_slots: 0
+...     }
+... ])
+... 
+... // Create and populate slots collection
+... db.createCollection("slots")
+... 
+... // Get parking IDs
+... let parkingAreas = db.parking_areas.find().toArray();
+... 
+... // Insert slots for each parking area based on their total slot counts
+... parkingAreas.forEach(parking => {
+...     let parkingId = parking._id;
+... 
+...     // Car slots
+...     db.slots.insertMany(
+...         Array.from({ length: parking.total_car_slots }, (_, i) => ({
+...             parking_id: parkingId,
+...             slot_number: i + 1,
+...             vehicle_type: "car",
+...             status: "available",
+...             current_booking_id: null
+...         }))
+...     );
+... 
+...     // Bike slots
+...     db.slots.insertMany(
+...         Array.from({ length: parking.total_bike_slots }, (_, i) => ({
+...             parking_id: parkingId,
+...             slot_number: i + 1,
+...             vehicle_type: "bike",
+...             status: "available",
+...             current_booking_id: null
+...         }))
+...     );
+... });
+... 
+... // Create bookings collection (empty since nothing is booked)
+... db.createCollection("bookings")
+{ ok: 1 }
+ParkingSystem> 
+
+krishna@KRISHNAs-MacBook-Air parking_booking % mkdir -p ~/mongo-data
+mongod --dbpath ~/mongo-data

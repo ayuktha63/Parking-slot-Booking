@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:parking_booking/SuccessAnimationScreen.dart';
 import 'dart:convert';
-import 'dart:async'; // Added for Future.delayed
+import 'dart:async';
 
 class BookingScreen extends StatefulWidget {
   final String location;
@@ -22,8 +22,6 @@ class _BookingScreenState extends State<BookingScreen> {
   String? selectedVehicle;
   DateTime? startDate;
   TimeOfDay? startTime;
-  DateTime? endDate;
-  TimeOfDay? endTime;
   Set<String> selectedSlotIds = {};
   final TextEditingController _vehicleNumberController = TextEditingController();
   List<dynamic> allSlots = [];
@@ -104,23 +102,15 @@ class _BookingScreenState extends State<BookingScreen> {
         _vehicleNumberController.text.isNotEmpty &&
         selectedSlotIds.isNotEmpty &&
         startDate != null &&
-        startTime != null &&
-        endDate != null &&
-        endTime != null) {
+        startTime != null) {
       final entryDateTime = DateTime(
         startDate!.year, startDate!.month, startDate!.day,
         startTime!.hour, startTime!.minute,
-      );
-      final exitDateTime = DateTime(
-        endDate!.year, endDate!.month, endDate!.day,
-        endTime!.hour, endTime!.minute,
       );
 
       try {
         final List<int> bookedSlots = [];
 
-        // This is the fix: wait for all booking requests to complete
-        // before trying to update the local state.
         for (String slotId in selectedSlotIds) {
           final response = await http.post(
             Uri.parse('http://localhost:3000/api/bookings'),
@@ -131,7 +121,6 @@ class _BookingScreenState extends State<BookingScreen> {
               'vehicle_type': selectedVehicle!.toLowerCase(),
               'number_plate': _vehicleNumberController.text,
               'entry_time': entryDateTime.toIso8601String(),
-              'exit_time': exitDateTime.toIso8601String(),
             }),
           );
 
@@ -139,7 +128,6 @@ class _BookingScreenState extends State<BookingScreen> {
             _showErrorDialog("Failed to book slot: ${response.body}");
             return;
           } else {
-            // Find the slot number from the local list before it's potentially removed
             final slot = allSlots.firstWhere((s) => s['_id'] == slotId, orElse: () => null);
             if (slot != null) {
               bookedSlots.add(slot['slot_number'] as int);
@@ -147,10 +135,8 @@ class _BookingScreenState extends State<BookingScreen> {
           }
         }
 
-        // Add a slight delay to allow the server to process changes
         await Future.delayed(const Duration(milliseconds: 500));
 
-        // Refresh parking area details and slot list after all bookings are complete
         if (mounted) {
           await _fetchParkingAreaDetails();
 
@@ -162,7 +148,6 @@ class _BookingScreenState extends State<BookingScreen> {
                 vehicleType: selectedVehicle!,
                 slots: bookedSlots,
                 entryDateTime: entryDateTime,
-                exitDateTime: exitDateTime,
               ),
             ),
           );
@@ -218,52 +203,6 @@ class _BookingScreenState extends State<BookingScreen> {
     );
     if (picked != null) {
       setState(() => startTime = picked);
-    }
-  }
-
-  Future<void> _selectEndDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: endDate ?? (startDate ?? DateTime.now()),
-      firstDate: startDate ?? DateTime.now(),
-      lastDate: DateTime(2101),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF3F51B5),
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() => endDate = picked);
-    }
-  }
-
-  Future<void> _selectEndTime(BuildContext context) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: endTime ?? TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF3F51B5),
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() => endTime = picked);
     }
   }
 
@@ -491,9 +430,6 @@ class _BookingScreenState extends State<BookingScreen> {
                           onTap: () => _selectStartTime(context),
                           child: Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-                            ),
                             child: Row(
                               children: [
                                 Container(
@@ -516,81 +452,6 @@ class _BookingScreenState extends State<BookingScreen> {
                                       const SizedBox(height: 4),
                                       Text(
                                         startTime != null ? startTime!.format(context) : "Select Entry Time",
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                              ],
-                            ),
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () => _selectEndDate(context),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(Icons.calendar_today, color: Color(0xFF3F51B5)),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        "Exit Date",
-                                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        endDate != null ? "${endDate!.day}/${endDate!.month}/${endDate!.year}" : "Select Exit Date",
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                              ],
-                            ),
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () => _selectEndTime(context),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(Icons.access_time, color: Color(0xFF3F51B5)),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        "Exit Time",
-                                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        endTime != null ? endTime!.format(context) : "Select Exit Time",
                                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
                                     ],

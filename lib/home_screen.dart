@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 class HomeScreen extends StatefulWidget {
   final String phoneNumber;
 
-  const HomeScreen({super.key, required this.phoneNumber});
+  const HomeScreen({super.key, required this.phoneNumber, required String phone, required String parkingAreaName});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();

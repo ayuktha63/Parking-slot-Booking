@@ -8,7 +8,7 @@ class SuccessScreen extends StatelessWidget {
   final String vehicleType;
   final List<int> slots;
   final DateTime entryDateTime;
-  final DateTime exitDateTime;
+  // Removed exitDateTime, as it is no longer collected at booking time.
 
   const SuccessScreen({
     super.key,
@@ -16,11 +16,11 @@ class SuccessScreen extends StatelessWidget {
     required this.vehicleType,
     required this.slots,
     required this.entryDateTime,
-    required this.exitDateTime,
   });
 
   void _shareReceipt(BuildContext context) {
     final int bookingId = 1000 + math.Random().nextInt(9000);
+    // Assuming a flat rate for simplicity
     final double totalAmount = 5 * slots.length.toDouble();
 
     final String shareText = '''
@@ -28,7 +28,6 @@ Parking Booking Receipt
 ----------------------
 Location: $location
 Entry: ${entryDateTime.day}/${entryDateTime.month}/${entryDateTime.year} at ${entryDateTime.hour}:${entryDateTime.minute.toString().padLeft(2, '0')}
-Exit: ${exitDateTime.day}/${exitDateTime.month}/${exitDateTime.year} at ${exitDateTime.hour}:${exitDateTime.minute.toString().padLeft(2, '0')}
 Vehicle Type: $vehicleType
 Parking Slots: ${slots.join(", ")}
 Total Amount: \$${totalAmount.toStringAsFixed(2)}
@@ -143,9 +142,12 @@ Please arrive 15 minutes before your booking time.
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
+                        // Pass the phone and parkingAreaName from the previous screen
                         Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(builder: (context) => const HomeScreen(phoneNumber: '',)),
+                          MaterialPageRoute(
+                              builder: (context) => const HomeScreen(
+                                  phone: '', parkingAreaName: '', phoneNumber: '',)),
                               (route) => false,
                         );
                       },
@@ -285,12 +287,6 @@ Please arrive 15 minutes before your booking time.
                   Icons.login,
                   "Entry",
                   "${entryDateTime.day}/${entryDateTime.month}/${entryDateTime.year} ${entryDateTime.hour}:${entryDateTime.minute.toString().padLeft(2, '0')}",
-                ),
-                const Divider(height: 24),
-                _buildDetailItem(
-                  Icons.logout,
-                  "Exit",
-                  "${exitDateTime.day}/${exitDateTime.month}/${exitDateTime.year} ${exitDateTime.hour}:${exitDateTime.minute.toString().padLeft(2, '0')}",
                 ),
                 const Divider(height: 24),
                 _buildDetailItem(

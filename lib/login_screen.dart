@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
             _passwordController.text == correctPassword) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const HomeScreen(phoneNumber: '',)),
+            MaterialPageRoute(builder: (context) => const HomeScreen(phoneNumber: '', phone: '', parkingAreaName: '',)),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

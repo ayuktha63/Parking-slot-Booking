@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:parking_booking/SuccessAnimationScreen.dart';
 import 'dart:convert';
+import 'dart:async'; // Added for Future.delayed
 
 class BookingScreen extends StatefulWidget {
   final String location;
@@ -39,7 +40,6 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void initState() {
     super.initState();
-    // Fetch data from the backend on initialization
     _fetchParkingAreaDetails();
   }
 
@@ -63,7 +63,6 @@ class _BookingScreenState extends State<BookingScreen> {
           if (availableCarSlots > 0) vehicleTypes.add("Car");
           if (availableBikeSlots > 0) vehicleTypes.add("Bike");
         });
-        // Fetch slots only if a vehicle type is already selected
         if (selectedVehicle != null) {
           await _fetchAllSlots();
         } else {
@@ -118,6 +117,10 @@ class _BookingScreenState extends State<BookingScreen> {
       );
 
       try {
+        final List<int> bookedSlots = [];
+
+        // This is the fix: wait for all booking requests to complete
+        // before trying to update the local state.
         for (String slotId in selectedSlotIds) {
           final response = await http.post(
             Uri.parse('http://localhost:3000/api/bookings'),
@@ -135,18 +138,22 @@ class _BookingScreenState extends State<BookingScreen> {
           if (response.statusCode != 200) {
             _showErrorDialog("Failed to book slot: ${response.body}");
             return;
+          } else {
+            // Find the slot number from the local list before it's potentially removed
+            final slot = allSlots.firstWhere((s) => s['_id'] == slotId, orElse: () => null);
+            if (slot != null) {
+              bookedSlots.add(slot['slot_number'] as int);
+            }
           }
         }
 
-        // Refresh parking areas and slots after booking
-        await _fetchParkingAreaDetails();
+        // Add a slight delay to allow the server to process changes
+        await Future.delayed(const Duration(milliseconds: 500));
 
-        final List<int> bookedSlots = selectedSlotIds.map((id) {
-          final slot = allSlots.firstWhere((s) => s['_id'] == id);
-          return slot['slot_number'] as int;
-        }).toList();
-
+        // Refresh parking area details and slot list after all bookings are complete
         if (mounted) {
+          await _fetchParkingAreaDetails();
+
           Navigator.push(
             context,
             MaterialPageRoute(

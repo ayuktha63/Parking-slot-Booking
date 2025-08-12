@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'success_screen.dart';
+import 'dart:async';
 
 class SuccessAnimationScreen extends StatefulWidget {
   final String location;
-  final DateTime date; // Legacy, kept for compatibility
-  final TimeOfDay time; // Legacy, kept for compatibility
   final String vehicleType;
   final List<int> slots;
-  final DateTime entryDateTime; // New: Full entry date and time
-  final DateTime exitDateTime; // New: Full exit date and time
+  final DateTime entryDateTime;
+  final DateTime exitDateTime;
 
   const SuccessAnimationScreen({
     required this.location,
-    required this.date,
-    required this.time,
     required this.vehicleType,
     required this.slots,
-    required this.entryDateTime, // Added
-    required this.exitDateTime, // Added
+    required this.entryDateTime,
+    required this.exitDateTime,
     super.key,
   });
 
@@ -31,13 +28,13 @@ class _SuccessAnimationScreenState extends State<SuccessAnimationScreen>
   @override
   void initState() {
     super.initState();
-    // No navigation here; handled in onLoaded callback
+    // The navigation logic is handled by the onLoaded callback in the build method.
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Match your app’s theme
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -47,25 +44,21 @@ class _SuccessAnimationScreenState extends State<SuccessAnimationScreen>
               width: 200,
               height: 200,
               fit: BoxFit.contain,
-              repeat: false, // Play once
+              repeat: false,
               onLoaded: (composition) {
-                // Navigate after animation duration + 1 second delay
                 Future.delayed(
                   composition.duration + const Duration(seconds: 1),
-                  () {
+                      () {
                     if (mounted) {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
                           builder: (context) => SuccessScreen(
                             location: widget.location,
-                            date: widget.date,
-                            time: widget.time,
                             vehicleType: widget.vehicleType,
                             slots: widget.slots,
-                            entryDateTime:
-                                widget.entryDateTime, // Pass new param
-                            exitDateTime: widget.exitDateTime, // Pass new param
+                            entryDateTime: widget.entryDateTime,
+                            exitDateTime: widget.exitDateTime,
                           ),
                         ),
                       );

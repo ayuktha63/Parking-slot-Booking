@@ -29,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => isLoading = true);
     try {
       final response =
-          await http.get(Uri.parse('http://localhost:3000/api/parking_areas'));
+      await http.get(Uri.parse('http://localhost:3000/api/parking_areas'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         List<Map<String, dynamic>> tempPlaces = [];
@@ -82,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content:
-                  Text("Failed to load parking areas: ${response.statusCode}")),
+              Text("Failed to load parking areas: ${response.statusCode}")),
         );
         setState(() => isLoading = false);
       }
@@ -102,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         filteredPlaces = parkingPlaces
             .where((place) =>
-                place["name"].toLowerCase().contains(query.toLowerCase()))
+            place["name"].toLowerCase().contains(query.toLowerCase()))
             .toList();
       }
     });
@@ -110,7 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openGoogleMaps(double lat, double lng) async {
     final url =
-        Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
@@ -160,16 +160,16 @@ class _HomeScreenState extends State<HomeScreen> {
               child: isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : filteredPlaces.isEmpty
-                      ? const Center(child: Text("No parking areas available"))
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
-                          itemCount: filteredPlaces.length,
-                          itemBuilder: (context, index) {
-                            final place = filteredPlaces[index];
-                            return _buildParkingCard(context, place);
-                          },
-                        ),
+                  ? const Center(child: Text("No parking areas available"))
+                  : ListView.builder(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+                itemCount: filteredPlaces.length,
+                itemBuilder: (context, index) {
+                  final place = filteredPlaces[index];
+                  return _buildParkingCard(context, place);
+                },
+              ),
             ),
           ],
         ),
@@ -215,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 prefixIcon: Icon(Icons.search, color: Colors.grey),
                 border: InputBorder.none,
                 contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
@@ -227,7 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildParkingCard(BuildContext context, Map<String, dynamic> place) {
     final carSlotsText = place["cars"] == 0 ? "Full" : place["cars"].toString();
     final bikeSlotsText =
-        place["bikes"] == 0 ? "Full" : place["bikes"].toString();
+    place["bikes"] == 0 ? "Full" : place["bikes"].toString();
 
     return Container(
       margin: const EdgeInsets.only(
@@ -247,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           ListTile(
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -350,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 value,
                 style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               Text(
                 label,

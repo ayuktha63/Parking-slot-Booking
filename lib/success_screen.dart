@@ -1,39 +1,38 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'dart:math' as math;
-import 'package:share/share.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SuccessScreen extends StatelessWidget {
   final String location;
-  final DateTime date; // Legacy, kept for compatibility
-  final TimeOfDay time; // Legacy, kept for compatibility
   final String vehicleType;
   final List<int> slots;
-  final DateTime entryDateTime; // New: Full entry date and time
-  final DateTime exitDateTime; // New: Full exit date and time
+  final DateTime entryDateTime;
+  final DateTime exitDateTime;
 
   const SuccessScreen({
     super.key,
     required this.location,
-    required this.date,
-    required this.time,
     required this.vehicleType,
     required this.slots,
-    required this.entryDateTime, // Added
-    required this.exitDateTime, // Added
+    required this.entryDateTime,
+    required this.exitDateTime,
   });
 
   void _shareReceipt(BuildContext context) {
+    final int bookingId = 1000 + math.Random().nextInt(9000);
+    final double totalAmount = 5 * slots.length.toDouble();
+
     final String shareText = '''
 Parking Booking Receipt
 ----------------------
 Location: $location
-Entry: ${entryDateTime.day}/${entryDateTime.month}/${entryDateTime.year} ${entryDateTime.hour}:${entryDateTime.minute.toString().padLeft(2, '0')}
-Exit: ${exitDateTime.day}/${exitDateTime.month}/${exitDateTime.year} ${exitDateTime.hour}:${exitDateTime.minute.toString().padLeft(2, '0')}
+Entry: ${entryDateTime.day}/${entryDateTime.month}/${entryDateTime.year} at ${entryDateTime.hour}:${entryDateTime.minute.toString().padLeft(2, '0')}
+Exit: ${exitDateTime.day}/${exitDateTime.month}/${exitDateTime.year} at ${exitDateTime.hour}:${exitDateTime.minute.toString().padLeft(2, '0')}
 Vehicle Type: $vehicleType
 Parking Slots: ${slots.join(", ")}
-Total Amount: \$${(5 * slots.length).toStringAsFixed(2)}
-Booking ID: #${1000 + math.Random().nextInt(9000)}
+Total Amount: \$${totalAmount.toStringAsFixed(2)}
+Booking ID: #$bookingId
 
 Please arrive 15 minutes before your booking time.
 ''';
@@ -146,10 +145,8 @@ Please arrive 15 minutes before your booking time.
                       onPressed: () {
                         Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  HomeScreen(phoneNumber: '')),
-                          (route) => false,
+                          MaterialPageRoute(builder: (context) => const HomeScreen(phoneNumber: '',)),
+                              (route) => false,
                         );
                       },
                       style: OutlinedButton.styleFrom(
@@ -223,6 +220,9 @@ Please arrive 15 minutes before your booking time.
   }
 
   Widget _buildBookingDetailCard(BuildContext context) {
+    final int bookingId = 1000 + math.Random().nextInt(9000);
+    final double totalAmount = 5 * slots.length.toDouble();
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
@@ -259,14 +259,13 @@ Please arrive 15 minutes before your booking time.
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    "#${1000 + math.Random().nextInt(9000)}",
+                    "#$bookingId",
                     style: const TextStyle(
                       color: Color(0xFF3F51B5),
                       fontWeight: FontWeight.bold,
@@ -295,9 +294,7 @@ Please arrive 15 minutes before your booking time.
                 ),
                 const Divider(height: 24),
                 _buildDetailItem(
-                  vehicleType == "Car"
-                      ? Icons.directions_car
-                      : Icons.motorcycle,
+                  vehicleType == "Car" ? Icons.directions_car : Icons.motorcycle,
                   "Vehicle Type",
                   vehicleType,
                 ),
@@ -311,7 +308,7 @@ Please arrive 15 minutes before your booking time.
                 _buildDetailItem(
                   Icons.attach_money,
                   "Total Amount",
-                  "\$${(5 * slots.length).toStringAsFixed(2)}",
+                  "\$${totalAmount.toStringAsFixed(2)}",
                   isHighlighted: true,
                 ),
               ],

@@ -24,8 +24,7 @@ class _BookingScreenState extends State<BookingScreen> {
   DateTime? endDate;
   TimeOfDay? endTime;
   Set<String> selectedSlotIds = {};
-  final TextEditingController _vehicleNumberController =
-      TextEditingController();
+  final TextEditingController _vehicleNumberController = TextEditingController();
   List<dynamic> allSlots = [];
   bool isLoading = true;
   int totalCarSlots = 0;
@@ -40,10 +39,12 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void initState() {
     super.initState();
+    // Fetch data from the backend on initialization
     _fetchParkingAreaDetails();
   }
 
   Future<void> _fetchParkingAreaDetails() async {
+    setState(() => isLoading = true);
     try {
       final response = await http.get(
         Uri.parse(
@@ -56,36 +57,33 @@ class _BookingScreenState extends State<BookingScreen> {
           totalBikeSlots = data['total_bike_slots'] ?? 0;
           availableCarSlots = data['available_car_slots'] ?? 0;
           availableBikeSlots = data['available_bike_slots'] ?? 0;
-          bookedCarSlots =
-              totalCarSlots - availableCarSlots; // Calculate booked slots
-          bookedBikeSlots =
-              totalBikeSlots - availableBikeSlots; // Calculate booked slots
-          // Filter vehicleTypes based on availability
+          bookedCarSlots = totalCarSlots - availableCarSlots;
+          bookedBikeSlots = totalBikeSlots - availableBikeSlots;
           vehicleTypes = [];
           if (availableCarSlots > 0) vehicleTypes.add("Car");
           if (availableBikeSlots > 0) vehicleTypes.add("Bike");
         });
-        await _fetchAllSlots(); // Fetch slots to calculate booked counts
+        // Fetch slots only if a vehicle type is already selected
+        if (selectedVehicle != null) {
+          await _fetchAllSlots();
+        } else {
+          setState(() => isLoading = false);
+        }
       } else {
-        print('Failed to fetch parking area details: ${response.statusCode}');
-        _showErrorDialog(
-            "Failed to fetch parking details: ${response.statusCode}");
+        _showErrorDialog("Failed to fetch parking details: ${response.statusCode}");
+        setState(() => isLoading = false);
       }
     } catch (error) {
-      print('Error fetching parking area details: $error');
       _showErrorDialog("Error fetching parking details: $error");
-    } finally {
       setState(() => isLoading = false);
     }
   }
 
   Future<void> _fetchAllSlots() async {
     if (selectedVehicle == null) return;
-
     setState(() => isLoading = true);
     try {
-      final url =
-          'http://localhost:3000/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
+      final url = 'http://localhost:3000/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         setState(() {
@@ -93,13 +91,10 @@ class _BookingScreenState extends State<BookingScreen> {
           isLoading = false;
         });
       } else {
-        print(
-            'Failed to load slots: Status ${response.statusCode}, Body: ${response.body}');
         _showErrorDialog("Failed to load slots: ${response.statusCode}");
         setState(() => isLoading = false);
       }
     } catch (error) {
-      print('Error fetching slots: $error');
       _showErrorDialog("Error loading slots: $error");
       setState(() => isLoading = false);
     }
@@ -114,22 +109,15 @@ class _BookingScreenState extends State<BookingScreen> {
         endDate != null &&
         endTime != null) {
       final entryDateTime = DateTime(
-        startDate!.year,
-        startDate!.month,
-        startDate!.day,
-        startTime!.hour,
-        startTime!.minute,
+        startDate!.year, startDate!.month, startDate!.day,
+        startTime!.hour, startTime!.minute,
       );
       final exitDateTime = DateTime(
-        endDate!.year,
-        endDate!.month,
-        endDate!.day,
-        endTime!.hour,
-        endTime!.minute,
+        endDate!.year, endDate!.month, endDate!.day,
+        endTime!.hour, endTime!.minute,
       );
 
       try {
-        print('Attempting to book slots: $selectedSlotIds');
         for (String slotId in selectedSlotIds) {
           final response = await http.post(
             Uri.parse('http://localhost:3000/api/bookings'),
@@ -144,39 +132,35 @@ class _BookingScreenState extends State<BookingScreen> {
             }),
           );
 
-          print(
-              'Booking response for slot $slotId: ${response.statusCode}, ${response.body}');
           if (response.statusCode != 200) {
-            print(
-                'Booking failed: Status ${response.statusCode}, Body: ${response.body}');
             _showErrorDialog("Failed to book slot: ${response.body}");
             return;
           }
         }
 
-        print('Booking successful, refreshing data');
+        // Refresh parking areas and slots after booking
         await _fetchParkingAreaDetails();
-        await _fetchAllSlots();
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SuccessAnimationScreen(
-              location: widget.location,
-              date: startDate!, // Legacy
-              time: startTime!, // Legacy
-              vehicleType: selectedVehicle!,
-              slots: selectedSlotIds
-                  .map((id) => allSlots.firstWhere(
-                      (slot) => slot['_id'] == id)['slot_number'] as int)
-                  .toList(),
-              entryDateTime: entryDateTime, // Added
-              exitDateTime: exitDateTime, // Added
+        final List<int> bookedSlots = selectedSlotIds.map((id) {
+          final slot = allSlots.firstWhere((s) => s['_id'] == id);
+          return slot['slot_number'] as int;
+        }).toList();
+
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SuccessAnimationScreen(
+                location: widget.location,
+                vehicleType: selectedVehicle!,
+                slots: bookedSlots,
+                entryDateTime: entryDateTime,
+                exitDateTime: exitDateTime,
+              ),
             ),
-          ),
-        );
+          );
+        }
       } catch (error) {
-        print('Error booking: $error');
         _showErrorDialog("Error confirming booking: $error");
       }
     } else {
@@ -281,8 +265,7 @@ class _BookingScreenState extends State<BookingScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: const [
               Icon(Icons.error_outline, color: Colors.red),
@@ -294,8 +277,7 @@ class _BookingScreenState extends State<BookingScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child:
-                  const Text("OK", style: TextStyle(color: Color(0xFF3F51B5))),
+              child: const Text("OK", style: TextStyle(color: Color(0xFF3F51B5))),
             ),
           ],
         );
@@ -354,10 +336,8 @@ class _BookingScreenState extends State<BookingScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildSlotCount(Icons.directions_car, "Cars",
-                          availableCarSlots, bookedCarSlots),
-                      _buildSlotCount(Icons.motorcycle, "Bikes",
-                          availableBikeSlots, bookedBikeSlots),
+                      _buildSlotCount(Icons.directions_car, "Cars", availableCarSlots, bookedCarSlots),
+                      _buildSlotCount(Icons.motorcycle, "Bikes", availableBikeSlots, bookedBikeSlots),
                     ],
                   ),
                 ],
@@ -389,25 +369,20 @@ class _BookingScreenState extends State<BookingScreen> {
                           DropdownButtonFormField<String>(
                             decoration: InputDecoration(
                               labelText: "Select Vehicle Type",
-                              labelStyle:
-                                  const TextStyle(color: Color(0xFF3F51B5)),
+                              labelStyle: const TextStyle(color: Color(0xFF3F51B5)),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    BorderSide(color: Colors.grey[300]!),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    BorderSide(color: Colors.grey[300]!),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    const BorderSide(color: Color(0xFF3F51B5)),
+                                borderSide: const BorderSide(color: Color(0xFF3F51B5)),
                               ),
-                              prefixIcon: const Icon(Icons.directions_car,
-                                  color: Color(0xFF3F51B5)),
+                              prefixIcon: const Icon(Icons.directions_car, color: Color(0xFF3F51B5)),
                               filled: true,
                               fillColor: Colors.white,
                             ),
@@ -419,32 +394,25 @@ class _BookingScreenState extends State<BookingScreen> {
                               );
                             }).toList(),
                             onChanged: vehicleTypes.isEmpty
-                                ? null // Disable dropdown if no options
+                                ? null
                                 : (value) => setState(() {
-                                      selectedVehicle = value;
-                                      selectedSlotIds.clear();
-                                      _fetchAllSlots();
-                                    }),
+                              selectedVehicle = value;
+                              selectedSlotIds.clear();
+                              _fetchAllSlots();
+                            }),
                             dropdownColor: Colors.white,
-                            icon: const Icon(Icons.arrow_drop_down,
-                                color: Color(0xFF3F51B5)),
-                            disabledHint:
-                                const Text("No available vehicle types"),
+                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF3F51B5)),
+                            disabledHint: const Text("No available vehicle types"),
                           ),
                           if (selectedVehicle != null) ...[
                             const SizedBox(height: 16),
                             TextField(
                               controller: _vehicleNumberController,
                               decoration: InputDecoration(
-                                labelText: selectedVehicle == "Car"
-                                    ? "Car Number Plate"
-                                    : "Bike Number Plate",
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12)),
+                                labelText: selectedVehicle == "Car" ? "Car Number Plate" : "Bike Number Plate",
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                 prefixIcon: Icon(
-                                  selectedVehicle == "Car"
-                                      ? Icons.directions_car
-                                      : Icons.motorcycle,
+                                  selectedVehicle == "Car" ? Icons.directions_car : Icons.motorcycle,
                                   color: const Color(0xFF3F51B5),
                                 ),
                                 filled: true,
@@ -478,47 +446,36 @@ class _BookingScreenState extends State<BookingScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              border: Border(
-                                  bottom: BorderSide(color: Colors.grey[200]!)),
+                              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
                             ),
                             child: Row(
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5)
-                                        .withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.calendar_today,
-                                      color: Color(0xFF3F51B5)),
+                                  child: const Icon(Icons.calendar_today, color: Color(0xFF3F51B5)),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         "Entry Date",
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[600]),
+                                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        startDate != null
-                                            ? "${startDate!.day}/${startDate!.month}/${startDate!.year}"
-                                            : "Select Entry Date",
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
+                                        startDate != null ? "${startDate!.day}/${startDate!.month}/${startDate!.year}" : "Select Entry Date",
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.arrow_forward_ios,
-                                    size: 16, color: Colors.grey),
+                                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                               ],
                             ),
                           ),
@@ -528,47 +485,36 @@ class _BookingScreenState extends State<BookingScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              border: Border(
-                                  bottom: BorderSide(color: Colors.grey[200]!)),
+                              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
                             ),
                             child: Row(
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5)
-                                        .withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.access_time,
-                                      color: Color(0xFF3F51B5)),
+                                  child: const Icon(Icons.access_time, color: Color(0xFF3F51B5)),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         "Entry Time",
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[600]),
+                                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        startTime != null
-                                            ? startTime!.format(context)
-                                            : "Select Entry Time",
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
+                                        startTime != null ? startTime!.format(context) : "Select Entry Time",
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.arrow_forward_ios,
-                                    size: 16, color: Colors.grey),
+                                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                               ],
                             ),
                           ),
@@ -578,47 +524,36 @@ class _BookingScreenState extends State<BookingScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              border: Border(
-                                  bottom: BorderSide(color: Colors.grey[200]!)),
+                              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
                             ),
                             child: Row(
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5)
-                                        .withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.calendar_today,
-                                      color: Color(0xFF3F51B5)),
+                                  child: const Icon(Icons.calendar_today, color: Color(0xFF3F51B5)),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         "Exit Date",
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[600]),
+                                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        endDate != null
-                                            ? "${endDate!.day}/${endDate!.month}/${endDate!.year}"
-                                            : "Select Exit Date",
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
+                                        endDate != null ? "${endDate!.day}/${endDate!.month}/${endDate!.year}" : "Select Exit Date",
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.arrow_forward_ios,
-                                    size: 16, color: Colors.grey),
+                                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                               ],
                             ),
                           ),
@@ -632,39 +567,29 @@ class _BookingScreenState extends State<BookingScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5)
-                                        .withOpacity(0.1),
+                                    color: const Color(0xFF3F51B5).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.access_time,
-                                      color: Color(0xFF3F51B5)),
+                                  child: const Icon(Icons.access_time, color: Color(0xFF3F51B5)),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         "Exit Time",
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[600]),
+                                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        endTime != null
-                                            ? endTime!.format(context)
-                                            : "Select Exit Time",
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
+                                        endTime != null ? endTime!.format(context) : "Select Exit Time",
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.arrow_forward_ios,
-                                    size: 16, color: Colors.grey),
+                                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                               ],
                             ),
                           ),
@@ -695,8 +620,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _buildLegendItem(Colors.grey[300]!, "Available"),
-                            _buildLegendItem(
-                                const Color(0xFF4CAF50), "Selected"),
+                            _buildLegendItem(const Color(0xFF4CAF50), "Selected"),
                             _buildLegendItem(Colors.red[300]!, "Booked"),
                           ],
                         ),
@@ -704,82 +628,64 @@ class _BookingScreenState extends State<BookingScreen> {
                         isLoading
                             ? const Center(child: CircularProgressIndicator())
                             : selectedVehicle == null
-                                ? const Center(
-                                    child: Text("Please select a vehicle type"))
-                                : allSlots.isEmpty
-                                    ? const Center(
-                                        child: Text(
-                                            "No slots found for this vehicle type"))
-                                    : Wrap(
-                                        spacing: 10.0,
-                                        runSpacing: 10.0,
-                                        children: allSlots.map((slot) {
-                                          final slotId = slot['_id'];
-                                          final slotNumber =
-                                              slot['slot_number'];
-                                          final isSelected =
-                                              selectedSlotIds.contains(slotId);
-                                          final isBooked =
-                                              slot['is_booked'] == true;
-
-                                          return GestureDetector(
-                                            onTap: isBooked
-                                                ? null
-                                                : () {
-                                                    setState(() {
-                                                      if (isSelected) {
-                                                        selectedSlotIds
-                                                            .remove(slotId);
-                                                      } else {
-                                                        selectedSlotIds
-                                                            .add(slotId);
-                                                      }
-                                                    });
-                                                  },
-                                            child: AnimatedContainer(
-                                              duration: const Duration(
-                                                  milliseconds: 200),
-                                              width: 65,
-                                              height: 65,
-                                              decoration: BoxDecoration(
-                                                color: isBooked
-                                                    ? Colors.red[300]
-                                                    : isSelected
-                                                        ? const Color(
-                                                            0xFF4CAF50)
-                                                        : Colors.grey[300],
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                boxShadow: isSelected
-                                                    ? [
-                                                        BoxShadow(
-                                                          color: const Color(
-                                                                  0xFF4CAF50)
-                                                              .withOpacity(0.4),
-                                                          blurRadius: 8,
-                                                          offset: const Offset(
-                                                              0, 2),
-                                                        )
-                                                      ]
-                                                    : [],
-                                              ),
-                                              child: Center(
-                                                child: Text(
-                                                  "$slotNumber",
-                                                  style: TextStyle(
-                                                    color:
-                                                        isBooked || isSelected
-                                                            ? Colors.white
-                                                            : Colors.black,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      ),
+                            ? const Center(child: Text("Please select a vehicle type"))
+                            : allSlots.isEmpty
+                            ? const Center(child: Text("No slots found for this vehicle type"))
+                            : Wrap(
+                          spacing: 10.0,
+                          runSpacing: 10.0,
+                          children: allSlots.map((slot) {
+                            final slotId = slot['_id'];
+                            final slotNumber = slot['slot_number'];
+                            final isSelected = selectedSlotIds.contains(slotId);
+                            final isBooked = slot['is_booked'] == true;
+                            return GestureDetector(
+                              onTap: isBooked
+                                  ? null
+                                  : () {
+                                setState(() {
+                                  if (isSelected) {
+                                    selectedSlotIds.remove(slotId);
+                                  } else {
+                                    selectedSlotIds.add(slotId);
+                                  }
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: 65,
+                                height: 65,
+                                decoration: BoxDecoration(
+                                  color: isBooked
+                                      ? Colors.red[300]
+                                      : isSelected
+                                      ? const Color(0xFF4CAF50)
+                                      : Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: isSelected
+                                      ? [
+                                    BoxShadow(
+                                      color: const Color(0xFF4CAF50).withOpacity(0.4),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    )
+                                  ]
+                                      : [],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    "$slotNumber",
+                                    style: TextStyle(
+                                      color: isBooked || isSelected ? Colors.white : Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ],
                     ),
                   ),
@@ -858,8 +764,7 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  Widget _buildSlotCount(
-      IconData icon, String label, int available, int booked) {
+  Widget _buildSlotCount(IconData icon, String label, int available, int booked) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -883,8 +788,7 @@ class _BookingScreenState extends State<BookingScreen> {
               ),
               Text(
                 "$label (Avail/Total)",
-                style: TextStyle(
-                    fontSize: 12, color: Colors.white.withOpacity(0.85)),
+                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.85)),
               ),
             ],
           ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
-
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -31,7 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
             _passwordController.text == correctPassword) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const HomeScreen(phoneNumber: '', phone: '', parkingAreaName: '',)),
+            MaterialPageRoute(
+                builder: (context) => const HomeScreen(phoneNumber: '', phone: '', parkingAreaName: '',)),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

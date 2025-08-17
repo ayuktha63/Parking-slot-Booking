@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 class HomeScreen extends StatefulWidget {
   final String phoneNumber;
 
-  const HomeScreen({super.key, required this.phoneNumber, required String phone, required String parkingAreaName});
+  const HomeScreen({super.key, required this.phoneNumber});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -18,27 +18,31 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> parkingPlaces = [];
   List<Map<String, dynamic>> filteredPlaces = [];
   bool isLoading = true;
+  String apiHost = '10.0.2.2'; // Default for Android Emulator
 
   @override
   void initState() {
     super.initState();
+    // Use 127.0.0.1 for web, 10.0.2.2 for Android emulator, or your machine's IP
+    if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
+      apiHost = '127.0.0.1';
+    }
     _fetchParkingAreas();
   }
 
   Future<void> _fetchParkingAreas() async {
     setState(() => isLoading = true);
     try {
-      final response =
-      await http.get(Uri.parse('http://localhost:3000/api/parking_areas'));
+      final response = await http.get(Uri.parse('http://$apiHost:3000/api/parking_areas'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         List<Map<String, dynamic>> tempPlaces = [];
 
         for (var area in data) {
           final carSlotsResponse = await http.get(Uri.parse(
-              'http://localhost:3000/api/parking_areas/${area['_id']}/slots?vehicle_type=car'));
+              'http://$apiHost:3000/api/parking_areas/${area['_id']}/slots?vehicle_type=car'));
           final bikeSlotsResponse = await http.get(Uri.parse(
-              'http://localhost:3000/api/parking_areas/${area['_id']}/slots?vehicle_type=bike'));
+              'http://$apiHost:3000/api/parking_areas/${area['_id']}/slots?vehicle_type=bike'));
 
           int availableCars = 0;
           int availableBikes = 0;
@@ -109,8 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openGoogleMaps(double lat, double lng) async {
-    final url =
-    Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
@@ -149,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Text(
                 "Available Parking Spots",
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF303030),
@@ -189,7 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Text(
             "Parking Space",
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: Color(0xFF303030),
@@ -231,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       margin: const EdgeInsets.only(
-          bottom: 16), // Fixed typo from 'custom' to 'bottom'
+          bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),

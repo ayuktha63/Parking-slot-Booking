@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'my_bookings_screen.dart';
 import 'user_login_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ProfileScreen extends StatefulWidget {
   final String phoneNumber;
@@ -17,10 +18,14 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
+  String apiHost = '10.0.2.2';
 
   @override
   void initState() {
     super.initState();
+    if (kIsWeb) {
+      apiHost = '127.0.0.1';
+    }
     _fetchUserData();
   }
 
@@ -30,7 +35,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
     try {
       final response = await http.get(
-        Uri.parse('http://localhost:3000/api/users/profile/${widget.phoneNumber}'),
+        Uri.parse('http://$apiHost:3000/api/users/profile/${widget.phoneNumber}'),
       );
       if (response.statusCode == 200) {
         setState(() {
@@ -54,7 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _updateProfile(String name, String carNumber, String bikeNumber) async {
     try {
       final response = await http.put(
-        Uri.parse('http://localhost:3000/api/users/profile'),
+        Uri.parse('http://$apiHost:3000/api/users/profile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': widget.phoneNumber,

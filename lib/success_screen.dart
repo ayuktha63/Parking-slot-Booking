@@ -143,12 +143,11 @@ Please arrive 15 minutes before your booking time.
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
-                        // Pass the phone and parkingAreaName from the previous screen
                         Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(
                               builder: (context) => HomeScreen(
-                                  phone: '', parkingAreaName: '', phoneNumber: phoneNumber,)),
+                                  phoneNumber: phoneNumber,)),
                               (route) => false,
                         );
                       },

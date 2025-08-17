@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:parking_booking/SuccessAnimationScreen.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 class BookingScreen extends StatefulWidget {
   final String location;
@@ -34,12 +35,15 @@ class _BookingScreenState extends State<BookingScreen> {
   int bookedCarSlots = 0;
   int availableBikeSlots = 0;
   int bookedBikeSlots = 0;
-
+  String apiHost = '10.0.2.2';
   List<String> vehicleTypes = ["Car", "Bike"];
 
   @override
   void initState() {
     super.initState();
+    if (kIsWeb) {
+      apiHost = '127.0.0.1';
+    }
     _fetchParkingAreaDetails();
   }
 
@@ -47,7 +51,7 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => isLoading = true);
     try {
       final response = await http.get(
-        Uri.parse('http://localhost:3000/api/parking_areas/${widget.parkingId}'),
+        Uri.parse('http://$apiHost:3000/api/parking_areas/${widget.parkingId}'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -81,7 +85,7 @@ class _BookingScreenState extends State<BookingScreen> {
     if (selectedVehicle == null) return;
     setState(() => isLoading = true);
     try {
-      final url = 'http://localhost:3000/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
+      final url = 'http://$apiHost:3000/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         setState(() {
@@ -114,7 +118,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
         for (String slotId in selectedSlotIds) {
           final response = await http.post(
-            Uri.parse('http://localhost:3000/api/bookings'),
+            Uri.parse('http://$apiHost:3000/api/bookings'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'parking_id': widget.parkingId,
@@ -145,7 +149,7 @@ class _BookingScreenState extends State<BookingScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => SuccessAnimationScreen(
+              builder: (context) => SuccessScreen(
                 location: widget.location,
                 vehicleType: selectedVehicle!,
                 slots: bookedSlots,

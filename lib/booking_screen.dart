@@ -4,7 +4,11 @@ import 'package:parking_booking/SuccessAnimationScreen.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'success_screen.dart'; // Import success_screen.dart
+import 'success_screen.dart';
+
+// Import the Razorpay flutter package. Flutter's build system will
+// automatically select the correct platform implementation.
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 class BookingScreen extends StatefulWidget {
   final String location;
@@ -39,6 +43,16 @@ class _BookingScreenState extends State<BookingScreen> {
   String apiHost = '10.0.2.2';
   List<String> vehicleTypes = ["Car", "Bike"];
 
+  // Razorpay instance
+  late Razorpay _razorpay;
+
+  // NOTE: Storing API keys like this is a security risk.
+  // In a production app, these should be handled securely on a server-side.
+  final String razorpayKey = "rzp_live_R6QQALUuJwgDaD";
+  
+  // Assuming a fixed price per slot for simplicity
+  final double pricePerSlot = 1.0;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +60,36 @@ class _BookingScreenState extends State<BookingScreen> {
       apiHost = '127.0.0.1';
     }
     _fetchParkingAreaDetails();
+
+    // Initialize Razorpay instance with the key
+    _razorpay = Razorpay();
+
+    // Set up a single listener for all events
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+  }
+
+  @override
+  void dispose() {
+    // Unregister all listeners before disposing using the clear method
+    _razorpay.clear();
+    _vehicleNumberController.dispose();
+    super.dispose();
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) {
+    // Payment was successful, now confirm the booking
+    _showBookingProgressDialog();
+    _confirmBooking(response.paymentId);
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    _showErrorDialog("Payment Failed: ${response.message}");
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    _showErrorDialog("External Wallet: ${response.walletName}");
   }
 
   Future<void> _fetchParkingAreaDetails() async {
@@ -103,68 +147,95 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
-  Future<void> _confirmBooking() async {
+  // The main payment initiation function
+  void _startPayment() {
     if (selectedVehicle != null &&
         _vehicleNumberController.text.isNotEmpty &&
         selectedSlotIds.isNotEmpty &&
         startDate != null &&
         startTime != null) {
-      final entryDateTime = DateTime(
-        startDate!.year, startDate!.month, startDate!.day,
-        startTime!.hour, startTime!.minute,
-      );
-
+      final int totalAmount = (selectedSlotIds.length * pricePerSlot * 100).toInt(); // Amount in paise
+      
+      var options = {
+        'key': razorpayKey,
+        'amount': totalAmount,
+        'name': 'ParkEasy Booking',
+        'description': 'Parking Booking for ${selectedSlotIds.length} slots',
+        'prefill': {'contact': widget.phoneNumber, 'email': 'testuser@razorpay.com'},
+        'notes': {
+          'location': widget.location,
+          'vehicle_type': selectedVehicle,
+          'slots': selectedSlotIds.join(','),
+        }
+      };
+      
       try {
-        final List<int> bookedSlots = [];
-
-        for (String slotId in selectedSlotIds) {
-          final response = await http.post(
-            Uri.parse('http://$apiHost:3000/api/bookings'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'parking_id': widget.parkingId,
-              'slot_id': slotId,
-              'vehicle_type': selectedVehicle!.toLowerCase(),
-              'number_plate': _vehicleNumberController.text,
-              'entry_time': entryDateTime.toIso8601String(),
-              'phone': widget.phoneNumber, // Pass phone number
-            }),
-          );
-
-          if (response.statusCode != 200) {
-            _showErrorDialog("Failed to book slot: ${response.body}");
-            return;
-          } else {
-            final slot = allSlots.firstWhere((s) => s['_id'] == slotId, orElse: () => null);
-            if (slot != null) {
-              bookedSlots.add(slot['slot_number'] as int);
-            }
-          }
-        }
-
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        if (mounted) {
-          await _fetchParkingAreaDetails();
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SuccessScreen(
-                location: widget.location,
-                vehicleType: selectedVehicle!,
-                slots: bookedSlots,
-                entryDateTime: entryDateTime,
-                phoneNumber: widget.phoneNumber, // Pass phoneNumber
-              ),
-            ),
-          );
-        }
-      } catch (error) {
-        _showErrorDialog("Error confirming booking: $error");
+        _razorpay.open(options);
+      } catch (e) {
+        _showErrorDialog("Error starting payment: $e");
       }
     } else {
       _showErrorDialog("Please complete all selections");
+    }
+  }
+
+  Future<void> _confirmBooking(String? paymentId) async {
+    final entryDateTime = DateTime(
+      startDate!.year, startDate!.month, startDate!.day,
+      startTime!.hour, startTime!.minute,
+    );
+
+    try {
+      final List<int> bookedSlots = [];
+
+      for (String slotId in selectedSlotIds) {
+        final response = await http.post(
+          Uri.parse('http://$apiHost:3000/api/bookings'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'parking_id': widget.parkingId,
+            'slot_id': slotId,
+            'vehicle_type': selectedVehicle!.toLowerCase(),
+            'number_plate': _vehicleNumberController.text,
+            'entry_time': entryDateTime.toIso8601String(),
+            'phone': widget.phoneNumber,
+            'payment_id': paymentId, // Pass the payment ID to your backend
+          }),
+        );
+
+        if (response.statusCode != 200) {
+          _showErrorDialog("Failed to book slot: ${response.body}");
+          return;
+        } else {
+          final slot = allSlots.firstWhere((s) => s['_id'] == slotId, orElse: () => null);
+          if (slot != null) {
+            bookedSlots.add(slot['slot_number'] as int);
+          }
+        }
+      }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+      Navigator.pop(context); // Dismiss the progress dialog
+
+      if (mounted) {
+        await _fetchParkingAreaDetails();
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SuccessScreen(
+              location: widget.location,
+              vehicleType: selectedVehicle!,
+              slots: bookedSlots,
+              entryDateTime: entryDateTime,
+              phoneNumber: widget.phoneNumber,
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      Navigator.pop(context); // Dismiss the progress dialog
+      _showErrorDialog("Error confirming booking: $error");
     }
   }
 
@@ -239,10 +310,23 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    _vehicleNumberController.dispose();
-    super.dispose();
+  void _showBookingProgressDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          content: Row(
+            children: const [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text("Confirming booking..."),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -576,10 +660,10 @@ class _BookingScreenState extends State<BookingScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: _confirmBooking,
-                      child: const Text(
-                        "Confirm Booking",
-                        style: TextStyle(
+                      onPressed: _startPayment, // Change here to call the payment function
+                      child: Text(
+                        "Pay and Confirm Booking (${selectedSlotIds.length * pricePerSlot})",
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),

@@ -1,13 +1,136 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'login_screen.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'my_bookings_screen.dart';
+import 'user_login_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+class ProfileScreen extends StatefulWidget {
+  final String phoneNumber;
+
+  const ProfileScreen({super.key, required this.phoneNumber});
+
+  @override
+  _ProfileScreenState createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  Map<String, dynamic>? _userData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserData();
+  }
+
+  Future<void> _fetchUserData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final response = await http.get(
+        Uri.parse('http://localhost:3000/api/users/profile/${widget.phoneNumber}'),
+      );
+      if (response.statusCode == 200) {
+        setState(() {
+          _userData = jsonDecode(response.body);
+          _isLoading = false;
+        });
+      } else {
+        print('Failed to load user data: ${response.statusCode}');
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updateProfile(String name, String carNumber, String bikeNumber) async {
+    try {
+      final response = await http.put(
+        Uri.parse('http://localhost:3000/api/users/profile'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': widget.phoneNumber,
+          'name': name,
+          'car_number_plate': carNumber,
+          'bike_number_plate': bikeNumber,
+        }),
+      );
+      if (response.statusCode == 200) {
+        _fetchUserData();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!')),
+        );
+      } else {
+        final responseBody = jsonDecode(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update profile: ${responseBody['message']}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating profile: $e')),
+      );
+    }
+  }
+
+  void _buildEditProfileDialog() {
+    final TextEditingController nameController = TextEditingController(text: _userData?['name']);
+    final TextEditingController carController = TextEditingController(text: _userData?['car_number_plate']);
+    final TextEditingController bikeController = TextEditingController(text: _userData?['bike_number_plate']);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Profile'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                TextField(
+                  controller: carController,
+                  decoration: const InputDecoration(labelText: 'Car Number Plate'),
+                ),
+                TextField(
+                  controller: bikeController,
+                  decoration: const InputDecoration(labelText: 'Bike Number Plate'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _updateProfile(nameController.text, carController.text, bikeController.text);
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   void _logout(BuildContext context) {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      MaterialPageRoute(builder: (context) => const UserLoginScreen()),
           (route) => false,
     );
   }
@@ -23,42 +146,81 @@ class ProfileScreen extends StatelessWidget {
         ),
         backgroundColor: const Color(0xFF3F51B5),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit, color: Colors.white),
+            onPressed: _isLoading ? null : _buildEditProfileDialog,
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _userData == null
+          ? const Center(child: Text("User data not found."))
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Hardcoded profile image and data
             const CircleAvatar(
               radius: 60,
-              backgroundColor: Colors.grey,
+              backgroundColor: Color(0xFF3F51B5),
               child: Icon(Icons.person, size: 60, color: Colors.white),
             ),
             const SizedBox(height: 10),
             Text(
-              "John Doe", // Hardcoded Name
+              _userData!['name'] ?? 'Guest',
               style: GoogleFonts.poppins(
                   fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
-              "9876543210", // Hardcoded Phone Number
-              style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[600]),
+              _userData!['phone'] ?? 'N/A',
+              style: GoogleFonts.poppins(
+                  fontSize: 16, color: Colors.grey[600]),
             ),
             const SizedBox(height: 30),
             _buildInfoCard(
               icon: Icons.directions_car,
               title: "Car Number Plate",
-              value: "MH12AB1234",
+              value: _userData!['car_number_plate'] ?? 'Not set',
             ),
             const SizedBox(height: 16),
             _buildInfoCard(
               icon: Icons.motorcycle,
               title: "Bike Number Plate",
-              value: "MH12CD5678",
+              value: _userData!['bike_number_plate'] ?? 'Not set',
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => MyBookingsScreen(phoneNumber: widget.phoneNumber),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.history),
+                label: Text(
+                  "My Bookings",
+                  style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3F51B5),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 5,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               height: 50,

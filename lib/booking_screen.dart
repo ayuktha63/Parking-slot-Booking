@@ -7,11 +7,13 @@ import 'dart:async';
 class BookingScreen extends StatefulWidget {
   final String location;
   final String parkingId;
+  final String phoneNumber;
 
   const BookingScreen({
     super.key,
     required this.location,
     required this.parkingId,
+    required this.phoneNumber,
   });
 
   @override
@@ -45,8 +47,7 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => isLoading = true);
     try {
       final response = await http.get(
-        Uri.parse(
-            'http://localhost:3000/api/parking_areas/${widget.parkingId}'),
+        Uri.parse('http://localhost:3000/api/parking_areas/${widget.parkingId}'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -121,6 +122,7 @@ class _BookingScreenState extends State<BookingScreen> {
               'vehicle_type': selectedVehicle!.toLowerCase(),
               'number_plate': _vehicleNumberController.text,
               'entry_time': entryDateTime.toIso8601String(),
+              'phone': widget.phoneNumber, // Pass phone number
             }),
           );
 
@@ -148,6 +150,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 vehicleType: selectedVehicle!,
                 slots: bookedSlots,
                 entryDateTime: entryDateTime,
+                phoneNumber: widget.phoneNumber, // Pass phoneNumber
               ),
             ),
           );

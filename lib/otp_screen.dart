@@ -44,7 +44,7 @@ class OTPScreen extends StatelessWidget {
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                          builder: (context) => const HomeScreen(phoneNumber: '', phone: '', parkingAreaName: '',)),
+                          builder: (context) => HomeScreen(phoneNumber: phoneNumber, phone: '', parkingAreaName: '',)),
                     );
                   },
                   style: ElevatedButton.styleFrom(

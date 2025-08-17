@@ -86,24 +86,22 @@ class _PhoneScreenState extends State<PhoneScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLoading = false;
 
-  Future<void> _saveUserToMongoDB(String phoneNumber) async {
+  // Updated to use the new /api/users/register endpoint
+  Future<void> _registerOrLoginUser(String phoneNumber) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/register'),
+        Uri.parse('http://localhost:3000/api/users/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': phoneNumber,
-          'name': '',
-          'car_number_plate': '',
-          'bike_number_plate': '',
         }),
       );
 
-      if (response.statusCode != 200) {
-        print('Failed to save user to MongoDB: ${response.body}');
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        print('Failed to register/login user: ${response.body}');
       }
     } catch (e) {
-      print('Error saving user to MongoDB: $e');
+      print('Error registering/logging in user: $e');
     }
   }
 
@@ -111,17 +109,18 @@ class _PhoneScreenState extends State<PhoneScreen> {
     setState(() => _isLoading = true);
     String phoneNumber = _phoneController.text.trim();
 
+    // Check if user exists or register them before proceeding with OTP
+    await _registerOrLoginUser(phoneNumber);
+
     await _auth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
       timeout: const Duration(seconds: 60),
       verificationCompleted: (PhoneAuthCredential credential) async {
         await _auth.signInWithCredential(credential);
-        await _saveUserToMongoDB(phoneNumber); // Save to MongoDB
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                HomeScreen(phoneNumber: phoneNumber), // Pass phoneNumber
+            builder: (context) => HomeScreen(phoneNumber: phoneNumber),
           ),
         );
       },
@@ -141,7 +140,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
           MaterialPageRoute(
             builder: (context) => OTPScreen(
               verificationId: verificationId,
-              phoneNumber: phoneNumber, // Pass phoneNumber to OTPScreen
+              phoneNumber: phoneNumber,
             ),
           ),
         );

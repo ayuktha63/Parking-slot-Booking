@@ -8,7 +8,7 @@ class SuccessScreen extends StatelessWidget {
   final String vehicleType;
   final List<int> slots;
   final DateTime entryDateTime;
-  // Removed exitDateTime, as it is no longer collected at booking time.
+  final String phoneNumber; // Added phoneNumber to constructor
 
   const SuccessScreen({
     super.key,
@@ -16,6 +16,7 @@ class SuccessScreen extends StatelessWidget {
     required this.vehicleType,
     required this.slots,
     required this.entryDateTime,
+    required this.phoneNumber,
   });
 
   void _shareReceipt(BuildContext context) {
@@ -146,8 +147,8 @@ Please arrive 15 minutes before your booking time.
                         Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(
-                              builder: (context) => const HomeScreen(
-                                  phone: '', parkingAreaName: '', phoneNumber: '',)),
+                              builder: (context) => HomeScreen(
+                                  phone: '', parkingAreaName: '', phoneNumber: phoneNumber,)),
                               (route) => false,
                         );
                       },

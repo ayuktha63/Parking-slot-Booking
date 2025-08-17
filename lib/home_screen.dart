@@ -134,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                MaterialPageRoute(builder: (context) => ProfileScreen(phoneNumber: widget.phoneNumber)),
               );
             },
           ),
@@ -324,6 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => BookingScreen(
           location: place["name"],
           parkingId: place["_id"],
+          phoneNumber: widget.phoneNumber, // Pass phoneNumber
         ),
       ),
     ).then((_) {

@@ -8,6 +8,7 @@ class SuccessAnimationScreen extends StatefulWidget {
   final String vehicleType;
   final List<int> slots;
   final DateTime entryDateTime;
+  final String phoneNumber;
   // Removed exitDateTime as it is no longer collected at booking time.
 
   const SuccessAnimationScreen({
@@ -15,6 +16,7 @@ class SuccessAnimationScreen extends StatefulWidget {
     required this.vehicleType,
     required this.slots,
     required this.entryDateTime,
+    required this.phoneNumber,
     super.key,
   });
 
@@ -57,6 +59,7 @@ class _SuccessAnimationScreenState extends State<SuccessAnimationScreen>
                             vehicleType: widget.vehicleType,
                             slots: widget.slots,
                             entryDateTime: widget.entryDateTime,
+                            phoneNumber: widget.phoneNumber,
                           ),
                         ),
                       );

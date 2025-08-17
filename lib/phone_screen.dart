@@ -86,7 +86,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLoading = false;
 
-  // Updated to use the new /api/users/register endpoint
   Future<void> _registerOrLoginUser(String phoneNumber) async {
     try {
       final response = await http.post(
@@ -109,9 +108,22 @@ class _PhoneScreenState extends State<PhoneScreen> {
     setState(() => _isLoading = true);
     String phoneNumber = _phoneController.text.trim();
 
-    // Check if user exists or register them before proceeding with OTP
     await _registerOrLoginUser(phoneNumber);
+    
+    // Immediately navigate to HomeScreen without waiting for Firebase OTP
+    if (mounted) {
+      setState(() => _isLoading = false);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomeScreen(phoneNumber: phoneNumber),
+        ),
+      );
+    }
 
+    // The following Firebase code is no longer needed for OTP verification
+    // but is kept as a reference.
+    /*
     await _auth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
       timeout: const Duration(seconds: 60),
@@ -149,6 +161,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
         setState(() => _isLoading = false);
       },
     );
+    */
   }
 
   @override

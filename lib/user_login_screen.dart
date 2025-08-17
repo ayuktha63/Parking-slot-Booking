@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'home_screen.dart';
-import 'otp_screen.dart';
+import 'user_register_screen.dart'; // Import the register screen
 
 // Define a consistent color scheme
 const primaryColor = Color(0xFF1E88E5);
@@ -83,13 +82,12 @@ class UserLoginScreen extends StatefulWidget {
 
 class _UserLoginScreenState extends State<UserLoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLoading = false;
 
   Future<void> _registerOrLoginUser(String phoneNumber) async {
     try {
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:3000/api/users/register'),
+        Uri.parse('http://localhost:3000/api/users/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': phoneNumber,
@@ -109,44 +107,17 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
     String phoneNumber = _phoneController.text.trim();
 
     await _registerOrLoginUser(phoneNumber);
-
-    await _auth.verifyPhoneNumber(
-      phoneNumber: phoneNumber,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        await _auth.signInWithCredential(credential);
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomeScreen(phoneNumber: phoneNumber),
-          ),
-        );
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Verification Failed: ${e.message}"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        setState(() => _isLoading = false);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OTPScreen(
-              verificationId: verificationId,
-              phoneNumber: phoneNumber,
-            ),
-          ),
-        );
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        setState(() => _isLoading = false);
-      },
-    );
+    
+    // Direct navigation to HomeScreen
+    if (mounted) {
+      setState(() => _isLoading = false);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomeScreen(phoneNumber: phoneNumber),
+        ),
+      );
+    }
   }
 
   @override
@@ -296,7 +267,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            "Register",
+                            "Login",
                             style: GoogleFonts.poppins(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -306,6 +277,19 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const UserRegisterScreen()),
+                    );
+                  },
+                  child: const Text(
+                    "Don't have an account? Register here.",
+                    style: TextStyle(color: primaryColor),
+                  ),
+                ),
               ],
             ),
           ),

@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'my_bookings_screen.dart';
-import 'user_login_screen.dart';
+import 'user_register_screen.dart'; // Import the new registration screen
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ProfileScreen extends StatefulWidget {
@@ -135,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _logout(BuildContext context) {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const UserLoginScreen()),
+      MaterialPageRoute(builder: (context) => const UserRegisterScreen()), // Navigate to the registration screen
           (route) => false,
     );
   }

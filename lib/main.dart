@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'user_login_screen.dart'; // Import the new user login screen
+import 'user_register_screen.dart'; // Point to the new user registration screen
 
 void main() {
   runApp(const ParkingApp());
@@ -48,7 +48,7 @@ class ParkingApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const UserLoginScreen(), // Set the home to the new UserLoginScreen
+      home: const UserRegisterScreen(), // Set the home to the new UserRegisterScreen
     );
   }
 }

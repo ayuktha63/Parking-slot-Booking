@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parking Traffic Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxB0Wf+zT1rLpY4x9R5t+N/1g1T8g+4vJ/o9/9lE+L0=" crossorigin="" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .leaflet-container {
+      height: 100vh;
+      width: 100%;
+    }
+    .leaflet-popup-content-wrapper {
+        border-radius: 0.5rem;
+    }
+    .challan-item:not(:last-child) {
+      border-bottom: 1px solid #e5e7eb;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import React, { useState, useEffect } from 'react';
+    import ReactDOM from 'react-dom/client';
+    import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+    import 'leaflet/dist/leaflet.css';
+    import L from 'leaflet';
+
+    // Fix for default Leaflet icons not showing
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    });
+
+    const API_URL = 'http://localhost:5000/api/web/parking-data';
+    const CHALLAN_API_URL = 'http://localhost:5000/api/web/challans';
+
+    const App = () => {
+      const [parkingData, setParkingData] = useState([]);
+      const [challanData, setChallanData] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        const fetchData = async () => {
+          try {
+            const [parkingRes, challanRes] = await Promise.all([
+              fetch(API_URL),
+              fetch(CHALLAN_API_URL)
+            ]);
+
+            if (!parkingRes.ok) throw new Error('Failed to fetch parking data.');
+            if (!challanRes.ok) throw new Error('Failed to fetch challan data.');
+            
+            const parkingJson = await parkingRes.json();
+            const challanJson = await challanRes.json();
+
+            setParkingData(parkingJson);
+            setChallanData(challanJson);
+          } catch (err) {
+            setError(err.message);
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        fetchData();
+      }, []);
+
+      if (loading) return <div class="flex justify-center items-center h-screen text-xl font-semibold">Loading...</div>;
+      if (error) return <div class="flex justify-center items-center h-screen text-red-500 text-xl font-semibold">Error: {error}</div>;
+
+      return (
+        <div class="flex h-screen w-full">
+          {/* Main Map Content */}
+          <div class="flex-1 relative">
+            <MapContainer center={[13.0827, 80.2707]} zoom={13} scrollWheelZoom={true} className="h-full w-full z-0">
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {parkingData.map((area) => (
+                <Marker key={area.id} position={[area.location.lat, area.location.lng]}>
+                  {/* Hover Popup */}
+                  <Popup>
+                    <div class="font-bold text-center">{area.name}</div>
+                    <div><span class="font-semibold">Cars:</span> {area.filledCars} filled</div>
+                    <div><span class="font-semibold">Bikes:</span> {area.filledBikes} filled</div>
+                  </Popup>
+                  {/* Click Popup */}
+                  <Popup>
+                    <div class="p-2">
+                        <h3 class="text-lg font-bold mb-2">{area.name}</h3>
+                        <p class="text-sm font-semibold text-gray-700">Total Spaces: {area.totalCars + area.totalBikes}</p>
+                        <p class="text-sm">Cars: <span class="font-bold">{area.filledCars}</span> / {area.totalCars}</p>
+                        <p class="text-sm">Bikes: <span class="font-bold">{area.filledBikes}</span> / {area.totalBikes}</p>
+                        <p class="text-sm mt-2 text-green-600 font-bold">Available: {area.availableSpaces}</p>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          </div>
+
+          {/* Sidebar for Challans */}
+          <div class="w-1/4 bg-gray-50 border-l border-gray-200 shadow-lg p-6 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4 text-center text-red-600">🚨 Challans Issued</h2>
+            {challanData.length > 0 ? (
+              <ul class="space-y-4">
+                {challanData.map((challan, index) => (
+                  <li key={index} class="bg-white p-4 rounded-lg shadow-sm challan-item">
+                    <div class="font-semibold text-gray-800">Vehicle: {challan.vehicleNumber}</div>
+                    <div class="text-sm text-gray-600">Location: {challan.location}</div>
+                    <div class="text-sm text-gray-600">Reason: {challan.reason}</div>
+                    <div class="text-sm text-gray-600">Amount: ₹{challan.amount}</div>
+                    <div class="text-xs text-gray-400 mt-1">Issued On: {new Date(challan.timestamp).toLocaleDateString()}</div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="text-center text-gray-500 mt-8">No challans issued yet.</p>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

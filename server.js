@@ -589,6 +589,16 @@ app.post('/api/owner/bookings/complete', async (req, res) => {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 });
+app.get('/api/users/all', async (req, res) => {
+    const db = await dbPromise;
 
+    try {
+        const users = await db.collection('users').find().toArray();
+        res.status(200).json(users);
+    } catch (error) {
+        console.error("Error fetching all users:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+});
 // Start Server
 app.listen(3000, () => console.log("Server running on port 3000"));

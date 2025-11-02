@@ -144,11 +144,20 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                     final formattedTime =
                         DateFormat('hh:mm a').format(entryTime);
 
-                    // Use subtle blue for active, muted grey for completed
-                    final statusColor =
-                        (booking['status'] ?? 'active') == 'completed'
-                            ? AppColors.infoItemBg
-                            : AppColors.markerColor;
+                    // --- MODIFIED ---
+                    // Determine status, background color, and text color
+                    final bool isCompleted =
+                        (booking['status'] ?? 'active') == 'completed';
+                    final String statusText = booking['status'] ?? 'active';
+
+                    final Color statusBgColor = isCompleted
+                        ? AppColors.infoItemBg // Dark grey for completed
+                        : AppColors.primaryText; // White for active
+
+                    final Color statusTextColor = isCompleted
+                        ? AppColors.primaryText // White text for completed
+                        : AppColors.darkText; // Black text for active
+                    // --- END MODIFIED ---
 
                     return Card(
                       color: AppColors.cardSurface,
@@ -165,27 +174,41 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                           children: [
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start, // Align top
                               children: [
-                                Text(
-                                  booking['location'] ?? 'N/A',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryText,
+                                // Wrapped with Flexible to constrain width
+                                Flexible(
+                                  child: Text(
+                                    booking['location'] ?? 'N/A',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primaryText,
+                                    ),
+                                    // Added overflow handling
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
                                   ),
                                 ),
+                                // Added spacing so chip doesn't touch text
+                                const SizedBox(width: 8),
+                                // --- MODIFIED ---
                                 Chip(
                                   label: Text(
-                                    booking['status'] ?? 'N/A',
+                                    statusText, // Use status text variable
                                     style: GoogleFonts.poppins(
-                                      color: AppColors.primaryText,
+                                      color:
+                                          statusTextColor, // Use status text color
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  backgroundColor: statusColor,
+                                  backgroundColor:
+                                      statusBgColor, // Use status bg color
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 4),
                                 ),
+                                // --- END MODIFIED ---
                               ],
                             ),
                             const SizedBox(height: 8),

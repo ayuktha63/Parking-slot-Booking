@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:parking_booking/user_login_screen.dart';
 import 'dart:convert';
 import 'user_register_screen.dart'; // Import the registration screen
 import 'my_bookings_screen.dart'; // ADDED: Placeholder for your bookings screen
@@ -360,7 +361,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
           builder: (context) =>
-              const UserRegisterScreen()), // Navigate to the registration screen
+              const UserLoginScreen()), // Navigate to the login screen
       (route) => false,
     );
   }
@@ -527,6 +528,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                         ),
+
+                        // --- ADDED "Orque" TEXT ---
+                        const SizedBox(
+                            height: 40), // Add spacing to push it down
+                        Text(
+                          "ORQUE INNOVATIONS LLP ❤️",
+                          style: GoogleFonts.poppins(
+                            fontSize: 40, // Larger font
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.hintText, // Grey shade
+                          ),
+                        ),
+                        const SizedBox(
+                            height:
+                                20), // Padding at the very bottom of the scroll
+                        // --- END ADDED TEXT ---
                       ],
                     ),
                   ),
@@ -579,7 +596,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              const Icon(Icons.person_outline, color: AppColors.markerColor),
+              // --- MODIFIED (was hardcoded white) ---
+              const Icon(Icons.person_outline, color: AppColors.primaryText),
               const SizedBox(width: 16),
               Text(
                 "Personal",
@@ -649,7 +667,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.settings_outlined, color: AppColors.markerColor),
+            // --- MODIFIED (was hardcoded white) ---
+            const Icon(Icons.settings_outlined, color: AppColors.primaryText),
             const SizedBox(width: 16),
             Text(
               "Settings",

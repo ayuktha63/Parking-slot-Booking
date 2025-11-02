@@ -22,9 +22,10 @@ class AppColors {
   static const Color hintText = Color(0xFF8E8E93);
   static const Color darkText = Color(0xFF000000); // For white buttons
 
-  static const Color markerColor = Color(0xFF0A84FF); // Blue accent
-  static const Color routeColor = Color(0xFF5AC8FA);
-  static const Color outlinedButtonColor = Color(0xFF8E8E93);
+  static const Color markerColor =
+      Color.fromARGB(255, 215, 215, 215); // Blue accent
+  static const Color routeColor = Color.fromARGB(255, 255, 255, 255);
+  static const Color outlinedButtonColor = Color.fromARGB(255, 255, 255, 255);
   static const Color elevatedButtonBg = Color(0xFFFFFFFF);
 
   static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
@@ -712,6 +713,27 @@ class _BookingScreenState extends State<BookingScreen> {
                                               selectedSlotIds.contains(slotId);
                                           final isBooked =
                                               slot['is_booked'] == true;
+
+                                          // --- Define colors based on state ---
+                                          final Color slotColor;
+                                          final Color textColor;
+
+                                          if (isBooked) {
+                                            // Booked: Medium-gray slot, dimmed text
+
+                                            slotColor = AppColors.primaryText;
+                                            textColor = AppColors.darkText;
+                                          } else if (isSelected) {
+                                            // Selected: White slot, dark text
+                                            slotColor = AppColors.hintText;
+                                            textColor = AppColors.darkText;
+                                          } else {
+                                            // Available: Dark gray slot, white text (as before)
+                                            slotColor = AppColors.infoItemBg;
+                                            textColor = AppColors.primaryText;
+                                          }
+                                          // --- End of color definitions ---
+
                                           return GestureDetector(
                                             onTap: isBooked
                                                 ? null
@@ -732,20 +754,14 @@ class _BookingScreenState extends State<BookingScreen> {
                                               width: 65,
                                               height: 65,
                                               decoration: BoxDecoration(
-                                                color: isBooked
-                                                    ? AppColors
-                                                        .outlinedButtonColor
-                                                    : isSelected
-                                                        ? AppColors.markerColor
-                                                        : AppColors.infoItemBg,
+                                                color: slotColor, // CHANGED
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 boxShadow: isSelected
                                                     ? [
                                                         BoxShadow(
                                                           color: AppColors
-                                                              .markerColor
-                                                              .withOpacity(0.4),
+                                                              .shadow, // CHANGED
                                                           blurRadius: 8,
                                                           offset: const Offset(
                                                               0, 2),
@@ -757,8 +773,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                                 child: Text(
                                                   "$slotNumber",
                                                   style: TextStyle(
-                                                    color:
-                                                        AppColors.primaryText,
+                                                    color: textColor, // CHANGED
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16,
                                                   ),
@@ -786,7 +801,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       onPressed:
                           _startPayment, // Change here to call the payment function
                       child: Text(
-                        "Pay and Confirm (\u20B9${selectedSlotIds.length * pricePerSlot})",
+                        "Book Now",
                         style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

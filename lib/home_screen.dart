@@ -437,19 +437,42 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => _navigateToBookingScreen(context, place),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  backgroundColor: const Color(0xFF3F51B5),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
+            // --- MODIFIED BUTTON SECTION ---
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () =>
+                        _openGoogleMaps(place["lat"], place["lng"]),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: Color(0xFF3F51B5)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text(
+                      "Directions",
+                      style: TextStyle(fontSize: 16, color: Color(0xFF3F51B5)),
+                    ),
+                  ),
                 ),
-                child: const Text("Book Now", style: TextStyle(fontSize: 16)),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _navigateToBookingScreen(context, place),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: const Color(0xFF3F51B5),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child:
+                        const Text("Book Now", style: TextStyle(fontSize: 16)),
+                  ),
+                ),
+              ],
             ),
+            // --- END OF MODIFIED SECTION ---
           ],
         ),
       ),
@@ -468,6 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     ).then((_) {
+      // Refresh parking data when returning from booking
       _fetchParkingAreas();
     });
   }
@@ -503,11 +527,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _openGoogleMaps(double lat, double lng) async {
-    final url =
-        Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+  // --- MODIFIED GOOGLE MAPS LAUNCHER ---
+  Future<void> _openGoogleMaps(double destLat, double destLng) async {
+    if (_currentLocation == null) {
+      _showErrorSnackBar("Current location not available for directions.");
+      return;
+    }
+
+    final double startLat = _currentLocation!.latitude;
+    final double startLng = _currentLocation!.longitude;
+
+    final String googleMapsUrl =
+        'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$destLat,$destLng&travelmode=driving';
+
+    final Uri url = Uri.parse(googleMapsUrl);
+
     if (await canLaunchUrl(url)) {
-      await launchUrl(url);
+      await launchUrl(url,
+          mode: LaunchMode.externalApplication); // Opens in Google Maps app
     } else {
       _showErrorSnackBar("Could not open Google Maps");
     }

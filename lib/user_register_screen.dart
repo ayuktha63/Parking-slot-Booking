@@ -5,26 +5,24 @@ import 'dart:convert';
 import 'user_login_screen.dart';
 
 // --- THEME COLORS ---
-// (Copied from home_screen.dart for consistency)
+// (Inverted to Light Mode)
 class AppColors {
-  static const Color appBackground = Color(0xFF1C1C1E);
-  static const Color cardSurface = Color(0xFF2C2C2E);
-  static const Color appBarColor = Color(0xFF1C1C1E);
-  static const Color searchBarColor = Color(0xFF2C2C2E);
-  static const Color infoItemBg = Color(0xFF3A3A3C);
+  static const Color appBackground = Color(0xFFF5F7FA); // Was dark
+  static const Color cardSurface = Color(0xFFFFFFFF); // Was dark grey
+  static const Color appBarColor = Color(0xFFF5F7FA); // Was dark
+  static const Color infoItemBg = Color(0xFFE8E8E8); // Was dark grey
 
-  static const Color primaryText = Color(0xFFFFFFFF);
-  static const Color secondaryText = Color(0xFFB0B0B5);
-  static const Color hintText = Color(0xFF8E8E93);
-  static const Color darkText = Color(0xFF000000); // For white buttons
+  static const Color primaryText = Color(0xFF000000); // Was white
+  static const Color secondaryText = Color(0xFF555555); // Was light grey
+  static const Color hintText = Color(0xFF8E8E93); // Kept as medium grey
+  static const Color lightText = Color(0xFFFFFFFF); // Was dark (for buttons)
 
-  static const Color markerColor = Color(0xFF0A84FF); // Blue accent
-  static const Color routeColor = Color(0xFF5AC8FA);
-  static const Color outlinedButtonColor = Color(0xFF8E8E93);
-  static const Color elevatedButtonBg = Color(0xFFFFFFFF);
+  static const Color markerColor = Color(0xFF0A84FF); // Blue accent (Kept)
+  static const Color outlinedButtonColor = Color(0xFF8E8E93); // Kept
+  static const Color elevatedButtonBg = Color(0xFF1C1C1E); // Was white
 
-  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
-  static const Color errorRed = Color(0xFFD32F2F); // A dark red for errors
+  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.1); // Lighter shadow
+  static const Color errorRed = Color(0xFFD32F2F); // (Kept)
 }
 // --- END THEME COLORS ---
 
@@ -104,7 +102,8 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
         SnackBar(
           content: Text(
             message,
-            style: const TextStyle(color: AppColors.primaryText),
+            style: TextStyle(
+                color: isError ? AppColors.lightText : AppColors.primaryText),
           ),
           backgroundColor: isError ? AppColors.errorRed : AppColors.cardSurface,
         ),
@@ -117,7 +116,8 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
     return Scaffold(
       backgroundColor: AppColors.appBackground,
       appBar: AppBar(
-        title: const Text("Register"),
+        title: const Text("Register",
+            style: TextStyle(color: AppColors.primaryText)),
         backgroundColor: AppColors.appBarColor,
         foregroundColor: AppColors.primaryText,
         elevation: 0,
@@ -172,7 +172,7 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         backgroundColor: AppColors.elevatedButtonBg,
-                        foregroundColor: AppColors.darkText,
+                        foregroundColor: AppColors.lightText,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

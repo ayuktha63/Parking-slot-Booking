@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:parking_booking/my_bookings_screen.dart';
 import 'dart:convert';
 import 'booking_screen.dart'; // Make sure this file exists
 import 'profile_screen.dart'; // Make sure this file exists
@@ -56,6 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
   List<LatLng> _routePoints = [];
   double _routeDistance = 0.0; // To store route distance in km
   int _currentPageIndex = 0;
+
+  // --- ADDED ---
+  // State for the bottom navigation bar
+  int _bottomNavIndex = 0;
 
   @override
   void initState() {
@@ -237,6 +242,53 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // --- ADDED ---
+  /// Handles navigation for the bottom bar
+  void _onBottomNavItemTapped(int index) {
+    if (index == 0) {
+      // Current screen (Map), do nothing
+      return;
+    }
+
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              MyBookingsScreen(phoneNumber: widget.phoneNumber),
+        ),
+      ).then((_) {
+        // When returning from profile, reset index to 0 (Map)
+        if (mounted) {
+          setState(() => _bottomNavIndex = 0);
+        }
+      });
+    }
+
+    if (index == 2) {
+      // Navigate to Profile
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ProfileScreen(phoneNumber: widget.phoneNumber),
+        ),
+      ).then((_) {
+        // When returning from profile, reset index to 0 (Map)
+        if (mounted) {
+          setState(() => _bottomNavIndex = 0);
+        }
+      });
+    }
+
+    // Set the state to visually update the bar *before* navigating
+    if (index != 1) {
+      // Don't set state for the placeholder 'Bookings' tab
+      setState(() {
+        _bottomNavIndex = index;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -250,18 +302,8 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: AppColors.appBarColor,
         elevation: 0,
         actions: [
-          IconButton(
-            icon:
-                const Icon(Icons.person_rounded, color: AppColors.primaryText),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) =>
-                        ProfileScreen(phoneNumber: widget.phoneNumber)),
-              );
-            },
-          ),
+          // --- REMOVED ---
+          // The profile button is now in the BottomNavigationBar
         ],
       ),
       body: Stack(
@@ -365,7 +407,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // --- HORIZONTAL SCROLLING PARKING LIST ---
           Positioned(
-            bottom: 20,
+            // --- MODIFIED ---
+            // Was 20, changed to 80 to be above the new BottomNavigationBar
+            bottom: 80,
             left: 0,
             right: 0,
             child: SizedBox(
@@ -399,6 +443,40 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+      // --- ADDED ---
+      // The new Bottom Navigation Bar
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: AppColors.appBarColor, // Match app bar
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.directions_car_filled_rounded),
+            activeIcon: Icon(Icons.directions_car_rounded),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_parking_outlined),
+            activeIcon: Icon(Icons.local_parking_rounded),
+            label: 'Activity',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_circle_outlined),
+            activeIcon: Icon(Icons.account_circle_rounded),
+            label: 'Profile',
+          ),
+        ],
+        currentIndex: _bottomNavIndex,
+        selectedItemColor: AppColors.primaryText, // Active icon color
+        unselectedItemColor: AppColors.hintText, // Inactive icon color
+        onTap: _onBottomNavItemTapped,
+        type: BottomNavigationBarType.fixed, // Keeps all visible
+        showUnselectedLabels: true,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
+        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w500),
+        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w400),
+      ),
+
+      // --- END ADDED SECTION ---
     );
   }
 
@@ -419,7 +497,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onChanged: _filterParkingPlaces,
         style: const TextStyle(color: AppColors.primaryText),
         decoration: const InputDecoration(
-          hintText: "Search parking location",
+          hintText: "Where to?",
           hintStyle: TextStyle(color: AppColors.hintText),
           prefixIcon: Icon(Icons.search, color: AppColors.hintText),
           border: InputBorder.none,
@@ -580,12 +658,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final double startLat = _currentLocation!.latitude;
-    final double startLng = _currentLocation!.longitude;
-
-    // Correct Google Maps URL format
+    // This format creates a cross-platform (iOS/Android) URL
     final String googleMapsUrl =
-        'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$destLat,$destLng';
+        "https://www.google.com/maps/dir/?api=1&origin=${_currentLocation!.latitude},${_currentLocation!.longitude}&destination=$destLat,$destLng&travelmode=driving";
 
     final Uri url = Uri.parse(googleMapsUrl);
 

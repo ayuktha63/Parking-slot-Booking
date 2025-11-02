@@ -48,7 +48,8 @@ class ParkingApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const UserRegisterScreen(), // Set the home to the new UserRegisterScreen
+      home:
+          const UserRegisterScreen(), // Set the home to the new UserRegisterScreen
     );
   }
 }

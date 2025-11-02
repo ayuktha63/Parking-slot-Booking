@@ -1,7 +1,32 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart';
+import 'home_screen.dart'; // Make sure AppColors is defined here
 import 'dart:math' as math;
 import 'package:share_plus/share_plus.dart';
+import 'package:google_fonts/google_fonts.dart'; // Import for GoogleFonts
+
+// Re-defining AppColors here for self-containment, or ensure it's imported correctly
+// If AppColors is already in home_screen.dart, you might remove this duplicate.
+class AppColors {
+  static const Color appBackground = Color(0xFF1C1C1E);
+  static const Color cardSurface = Color(0xFF2C2C2E);
+  static const Color appBarColor = Color(0xFF1C1C1E);
+  static const Color searchBarColor = Color(0xFF2C2C2E);
+  static const Color infoItemBg = Color(0xFF3A3A3C);
+
+  static const Color primaryText = Color(0xFFFFFFFF);
+  static const Color secondaryText = Color(0xFFB0B0B5);
+  static const Color hintText = Color(0xFF8E8E93);
+  static const Color darkText = Color(0xFF000000); // For white buttons
+
+  static const Color markerColor = Color(0xFF0A84FF); // Blue accent
+  static const Color routeColor = Color(0xFF5AC8FA);
+  static const Color outlinedButtonColor = Color(0xFF8E8E93);
+  static const Color elevatedButtonBg = Color(0xFFFFFFFF);
+
+  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+  static const Color successGreen = Color(0xFF34C759); // iOS-like success green
+  static const Color successGreenLight = Color(0xFF34C759); // For opacity
+}
 
 class SuccessScreen extends StatelessWidget {
   final String location;
@@ -52,9 +77,14 @@ Please arrive 15 minutes before your booking time.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.appBackground,
       appBar: AppBar(
-        title: const Text("Booking Confirmed"),
+        title: Text(
+          "Booking Confirmed",
+          style: GoogleFonts.poppins(color: AppColors.primaryText),
+        ),
+        backgroundColor: AppColors.appBarColor,
+        elevation: 0,
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -67,12 +97,12 @@ Please arrive 15 minutes before your booking time.
                     const SizedBox(height: 20),
                     _buildSuccessAnimation(),
                     const SizedBox(height: 20),
-                    const Text(
+                    Text(
                       "Booking Confirmed!",
-                      style: TextStyle(
+                      style: GoogleFonts.poppins(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF303030),
+                        color: AppColors.primaryText,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -81,9 +111,9 @@ Please arrive 15 minutes before your booking time.
                       child: Text(
                         "Your parking spot has been successfully reserved.",
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: GoogleFonts.poppins(
                           fontSize: 16,
-                          color: Colors.grey[600],
+                          color: AppColors.secondaryText,
                         ),
                       ),
                     ),
@@ -94,10 +124,10 @@ Please arrive 15 minutes before your booking time.
                       margin: const EdgeInsets.symmetric(horizontal: 20),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4CAF50).withOpacity(0.1),
+                        color: AppColors.successGreen.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: const Color(0xFF4CAF50).withOpacity(0.3),
+                          color: AppColors.successGreen.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
@@ -105,14 +135,14 @@ Please arrive 15 minutes before your booking time.
                         children: [
                           const Icon(
                             Icons.info_outline,
-                            color: Color(0xFF4CAF50),
+                            color: AppColors.successGreen,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               "Please arrive 15 minutes before your booking time. Your QR code has been sent to your email.",
-                              style: TextStyle(
-                                color: const Color(0xFF4CAF50),
+                              style: GoogleFonts.poppins(
+                                color: AppColors.successGreen,
                                 fontSize: 14,
                               ),
                             ),
@@ -129,10 +159,10 @@ Please arrive 15 minutes before your booking time.
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.cardSurface,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: AppColors.shadow,
                     blurRadius: 10,
                     offset: const Offset(0, -5),
                   ),
@@ -146,22 +176,23 @@ Please arrive 15 minutes before your booking time.
                         Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(
-                              builder: (context) => HomeScreen(
-                                  phoneNumber: phoneNumber,)),
-                              (route) => false,
+                              builder: (context) =>
+                                  HomeScreen(phoneNumber: phoneNumber)),
+                          (route) => false,
                         );
                       },
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF3F51B5)),
+                        side: const BorderSide(
+                            color: AppColors.outlinedButtonColor),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text(
+                      child: Text(
                         "Go to Home",
-                        style: TextStyle(
-                          color: Color(0xFF3F51B5),
+                        style: GoogleFonts.poppins(
+                          color: AppColors.primaryText,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -172,7 +203,7 @@ Please arrive 15 minutes before your booking time.
                     child: ElevatedButton(
                       onPressed: () => _shareReceipt(context),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF3F51B5),
+                        backgroundColor: AppColors.elevatedButtonBg,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -180,13 +211,14 @@ Please arrive 15 minutes before your booking time.
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.share, size: 18),
-                          SizedBox(width: 8),
+                        children: [
+                          const Icon(Icons.share,
+                              size: 18, color: AppColors.darkText),
+                          const SizedBox(width: 8),
                           Text(
                             "Share Receipt",
-                            style: TextStyle(
-                              color: Colors.white,
+                            style: GoogleFonts.poppins(
+                              color: AppColors.darkText,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -208,14 +240,14 @@ Please arrive 15 minutes before your booking time.
       height: 150,
       width: 150,
       decoration: BoxDecoration(
-        color: const Color(0xFF4CAF50).withOpacity(0.1),
+        color: AppColors.successGreen.withOpacity(0.1),
         shape: BoxShape.circle,
       ),
       child: const Center(
         child: Icon(
           Icons.check_circle,
           size: 100,
-          color: Color(0xFF4CAF50),
+          color: AppColors.successGreen,
         ),
       ),
     );
@@ -228,11 +260,11 @@ Please arrive 15 minutes before your booking time.
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: AppColors.shadow,
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -243,7 +275,7 @@ Please arrive 15 minutes before your booking time.
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
-              color: Color(0xFF3F51B5),
+              color: AppColors.cardSurface, // Use card surface for consistency
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -252,24 +284,26 @@ Please arrive 15 minutes before your booking time.
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   "Booking Details",
-                  style: TextStyle(
-                    color: Colors.white,
+                  style: GoogleFonts.poppins(
+                    color: AppColors.primaryText,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors
+                        .infoItemBg, // Use a slightly different background for the ID badge
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     "#$bookingId",
-                    style: const TextStyle(
-                      color: Color(0xFF3F51B5),
+                    style: GoogleFonts.poppins(
+                      color: AppColors.primaryText, // Text remains primary
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -282,25 +316,27 @@ Please arrive 15 minutes before your booking time.
             child: Column(
               children: [
                 _buildDetailItem(Icons.location_on, "Location", location),
-                const Divider(height: 24),
+                Divider(height: 24, color: AppColors.infoItemBg),
                 _buildDetailItem(
                   Icons.login,
                   "Entry",
                   "${entryDateTime.day}/${entryDateTime.month}/${entryDateTime.year} ${entryDateTime.hour}:${entryDateTime.minute.toString().padLeft(2, '0')}",
                 ),
-                const Divider(height: 24),
+                Divider(height: 24, color: AppColors.infoItemBg),
                 _buildDetailItem(
-                  vehicleType == "Car" ? Icons.directions_car : Icons.motorcycle,
+                  vehicleType == "Car"
+                      ? Icons.directions_car
+                      : Icons.motorcycle,
                   "Vehicle Type",
                   vehicleType,
                 ),
-                const Divider(height: 24),
+                Divider(height: 24, color: AppColors.infoItemBg),
                 _buildDetailItem(
                   Icons.confirmation_number,
                   "Parking Slots",
                   slots.join(", "),
                 ),
-                const Divider(height: 24),
+                Divider(height: 24, color: AppColors.infoItemBg),
                 _buildDetailItem(
                   Icons.attach_money,
                   "Total Amount",
@@ -322,12 +358,12 @@ Please arrive 15 minutes before your booking time.
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: const Color(0xFF3F51B5).withOpacity(0.1),
+            color: AppColors.infoItemBg,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
             icon,
-            color: const Color(0xFF3F51B5),
+            color: AppColors.secondaryText, // Icon color
             size: 22,
           ),
         ),
@@ -337,20 +373,21 @@ Please arrive 15 minutes before your booking time.
           children: [
             Text(
               label,
-              style: TextStyle(
+              style: GoogleFonts.poppins(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: AppColors.secondaryText,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               value,
-              style: TextStyle(
+              style: GoogleFonts.poppins(
                 fontSize: 16,
                 fontWeight: isHighlighted ? FontWeight.bold : FontWeight.w500,
                 color: isHighlighted
-                    ? const Color(0xFF3F51B5)
-                    : const Color(0xFF303030),
+                    ? AppColors
+                        .markerColor // Use a bright accent for highlighted text
+                    : AppColors.primaryText,
               ),
             ),
           ],

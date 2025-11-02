@@ -7,11 +7,25 @@ import 'dart:convert';
 import 'home_screen.dart';
 import 'user_register_screen.dart'; // Import the register screen
 
-// Define a consistent color scheme
-const primaryColor = Color(0xFF1E88E5);
-const secondaryColor = Color(0xFFFFA726);
-const backgroundColor = Color(0xFFF5F7FA);
-const cardColor = Colors.white;
+// --- INVERTED THEME COLORS (LIGHT MODE) ---
+class AppColors {
+  static const Color appBackground = Color(0xFFF5F7FA); // Was dark
+  static const Color cardSurface = Color(0xFFFFFFFF); // Was dark grey
+  static const Color appBarColor = Color(0xFFF5F7FA); // Was dark
+  static const Color infoItemBg = Color(0xFFE8E8E8); // Was dark grey
+
+  static const Color primaryText = Color(0xFF000000); // Was white
+  static const Color secondaryText = Color(0xFF555555); // Was light grey
+  static const Color hintText = Color(0xFF8E8E93); // Kept as medium grey
+  static const Color lightText = Color(0xFFFFFFFF); // Was dark (for buttons)
+
+  static const Color markerColor = Color(0xFF0A84FF); // Blue accent (Kept)
+  static const Color elevatedButtonBg = Color(0xFF1C1C1E); // Was white
+
+  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.1); // Lighter shadow
+  static const Color errorRed = Color(0xFFD32F2F); // (Kept)
+}
+// --- END THEME COLORS ---
 
 class LoadingScreen extends StatefulWidget {
   const LoadingScreen({super.key});
@@ -37,7 +51,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: AppColors.appBackground,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -54,7 +68,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
               style: GoogleFonts.poppins(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: primaryColor,
+                color: AppColors.primaryText,
               ),
             ),
             const SizedBox(height: 10),
@@ -62,7 +76,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
               "Finding your parking spot...",
               style: GoogleFonts.poppins(
                 fontSize: 18,
-                color: Colors.grey[700],
+                color: AppColors.secondaryText,
                 fontWeight: FontWeight.w400,
               ),
             ),
@@ -83,22 +97,54 @@ class UserLoginScreen extends StatefulWidget {
 class _UserLoginScreenState extends State<UserLoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
+  String apiHost = '10.0.2.2'; // Default for Android Emulator
 
-  Future<void> _registerOrLoginUser(String phoneNumber) async {
+  @override
+  void initState() {
+    super.initState();
+    // Adjust host for web
+    if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
+      apiHost = '127.0.0.1';
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: TextStyle(
+                color: isError ? AppColors.lightText : AppColors.primaryText),
+          ),
+          backgroundColor: isError ? AppColors.errorRed : AppColors.cardSurface,
+        ),
+      );
+    }
+  }
+
+  Future<bool> _registerOrLoginUser(String phoneNumber) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/users/register'),
+        Uri.parse('http://$apiHost:3000/api/users/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': phoneNumber,
         }),
       );
 
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        print('Failed to register/login user: ${response.body}');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Successfully logged in or registered
+        return true;
+      } else {
+        final body = jsonDecode(response.body);
+        _showSnackBar('Login failed: ${body['message'] ?? 'Unknown error'}',
+            isError: true);
+        return false;
       }
     } catch (e) {
-      print('Error registering/logging in user: $e');
+      _showSnackBar('Error: $e', isError: true);
+      return false;
     }
   }
 
@@ -106,17 +152,20 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
     setState(() => _isLoading = true);
     String phoneNumber = _phoneController.text.trim();
 
-    await _registerOrLoginUser(phoneNumber);
-    
-    // Direct navigation to HomeScreen
+    bool success = await _registerOrLoginUser(phoneNumber);
+
     if (mounted) {
       setState(() => _isLoading = false);
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomeScreen(phoneNumber: phoneNumber),
-        ),
-      );
+      if (success) {
+        // Only navigate if login/register was successful
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomeScreen(phoneNumber: phoneNumber),
+          ),
+        );
+      }
+      // If not successful, the snackbar was already shown by _registerOrLoginUser
     }
   }
 
@@ -130,16 +179,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              primaryColor.withOpacity(0.9),
-              backgroundColor,
-            ],
-          ),
-        ),
+        color: AppColors.appBackground, // Use solid light background
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -159,10 +199,10 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                   style: GoogleFonts.poppins(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.primaryText,
                     shadows: [
                       Shadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withOpacity(0.1),
                         offset: const Offset(2, 2),
                         blurRadius: 4,
                       ),
@@ -175,7 +215,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                   "Book your parking spot in seconds",
                   style: GoogleFonts.poppins(
                     fontSize: 18,
-                    color: Colors.white70,
+                    color: AppColors.secondaryText,
                     fontWeight: FontWeight.w400,
                   ),
                   textAlign: TextAlign.center,
@@ -184,11 +224,11 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: cardColor,
+                    color: AppColors.cardSurface,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.3),
+                        color: AppColors.shadow,
                         spreadRadius: 2,
                         blurRadius: 10,
                         offset: const Offset(0, 4),
@@ -202,7 +242,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                         children: [
                           Icon(
                             Icons.local_parking_rounded,
-                            color: primaryColor,
+                            color: AppColors.markerColor, // Blue accent
                             size: 28,
                           ),
                           const SizedBox(width: 10),
@@ -211,7 +251,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                             style: GoogleFonts.poppins(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
+                              color: AppColors.primaryText,
                             ),
                           ),
                         ],
@@ -221,7 +261,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                         "Enter your phone number to begin",
                         style: GoogleFonts.poppins(
                           fontSize: 14,
-                          color: Colors.grey[600],
+                          color: AppColors.secondaryText,
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -230,16 +270,16 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                         keyboardType: TextInputType.phone,
                         style: GoogleFonts.poppins(
                           fontSize: 16,
-                          color: Colors.grey[800],
+                          color: AppColors.primaryText,
                         ),
                         decoration: InputDecoration(
                           hintText: "+91 123 456 7890",
                           hintStyle:
-                              GoogleFonts.poppins(color: Colors.grey[400]),
-                          prefixIcon:
-                              Icon(Icons.phone_rounded, color: primaryColor),
+                              GoogleFonts.poppins(color: AppColors.hintText),
+                          prefixIcon: Icon(Icons.phone_rounded,
+                              color: AppColors.markerColor),
                           filled: true,
-                          fillColor: Colors.grey[100],
+                          fillColor: AppColors.infoItemBg,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
@@ -258,20 +298,21 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _verifyPhone,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: secondaryColor,
+                      backgroundColor: AppColors.elevatedButtonBg,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 5,
                     ),
                     child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
+                        ? const CircularProgressIndicator(
+                            color: AppColors.lightText)
                         : Text(
                             "Login",
                             style: GoogleFonts.poppins(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: AppColors.lightText,
                             ),
                           ),
                   ),
@@ -287,7 +328,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                   },
                   child: const Text(
                     "Don't have an account? Register here.",
-                    style: TextStyle(color: primaryColor),
+                    style: TextStyle(color: AppColors.markerColor),
                   ),
                 ),
               ],

@@ -4,6 +4,30 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'user_login_screen.dart';
 
+// --- THEME COLORS ---
+// (Copied from home_screen.dart for consistency)
+class AppColors {
+  static const Color appBackground = Color(0xFF1C1C1E);
+  static const Color cardSurface = Color(0xFF2C2C2E);
+  static const Color appBarColor = Color(0xFF1C1C1E);
+  static const Color searchBarColor = Color(0xFF2C2C2E);
+  static const Color infoItemBg = Color(0xFF3A3A3C);
+
+  static const Color primaryText = Color(0xFFFFFFFF);
+  static const Color secondaryText = Color(0xFFB0B0B5);
+  static const Color hintText = Color(0xFF8E8E93);
+  static const Color darkText = Color(0xFF000000); // For white buttons
+
+  static const Color markerColor = Color(0xFF0A84FF); // Blue accent
+  static const Color routeColor = Color(0xFF5AC8FA);
+  static const Color outlinedButtonColor = Color(0xFF8E8E93);
+  static const Color elevatedButtonBg = Color(0xFFFFFFFF);
+
+  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+  static const Color errorRed = Color(0xFFD32F2F); // A dark red for errors
+}
+// --- END THEME COLORS ---
+
 class UserRegisterScreen extends StatefulWidget {
   const UserRegisterScreen({super.key});
 
@@ -18,6 +42,16 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
   final TextEditingController _carController = TextEditingController();
   final TextEditingController _bikeController = TextEditingController();
   bool _isLoading = false;
+  String apiHost = '10.0.2.2'; // Default for Android Emulator
+
+  @override
+  void initState() {
+    super.initState();
+    // Adjust host for web
+    if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
+      apiHost = '127.0.0.1';
+    }
+  }
 
   Future<void> _registerUser() async {
     if (_formKey.currentState!.validate()) {
@@ -33,43 +67,62 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
 
       try {
         final response = await http.post(
-          Uri.parse('http://localhost:3000/api/users/register'),
+          Uri.parse('http://$apiHost:3000/api/users/register'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(userData),
         );
 
         if (response.statusCode == 201) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Registration successful! Please log in.')),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const UserLoginScreen()),
-          );
+          _showSnackBar('Registration successful! Please log in.',
+              isError: false);
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const UserLoginScreen()),
+            );
+          }
         } else {
           final responseBody = jsonDecode(response.body);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Registration failed: ${responseBody['message']}')),
-          );
+          _showSnackBar('Registration failed: ${responseBody['message']}',
+              isError: true);
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        _showSnackBar('Error: $e', isError: true);
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(color: AppColors.primaryText),
+          ),
+          backgroundColor: isError ? AppColors.errorRed : AppColors.cardSurface,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.appBackground,
       appBar: AppBar(
         title: const Text("Register"),
-        backgroundColor: const Color(0xFF3F51B5),
+        backgroundColor: AppColors.appBarColor,
+        foregroundColor: AppColors.primaryText,
+        elevation: 0,
+        iconTheme: const IconThemeData(
+            color: AppColors.primaryText), // For back button
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -83,7 +136,7 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
                 style: GoogleFonts.poppins(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF303030),
+                  color: AppColors.primaryText,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -95,40 +148,50 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
                 return null;
               }),
               const SizedBox(height: 16),
-              _buildTextField(_phoneController, "Phone Number", Icons.phone, (value) {
+              _buildTextField(_phoneController, "Phone Number", Icons.phone,
+                  (value) {
                 if (value == null || value.isEmpty) {
                   return 'Please enter a phone number';
                 }
                 return null;
               }),
               const SizedBox(height: 16),
-              _buildTextField(_carController, "Car Number Plate", Icons.directions_car),
+              _buildTextField(
+                  _carController, "Car Number Plate", Icons.directions_car),
               const SizedBox(height: 16),
-              _buildTextField(_bikeController, "Bike Number Plate", Icons.motorcycle),
+              _buildTextField(
+                  _bikeController, "Bike Number Plate", Icons.motorcycle),
               const SizedBox(height: 30),
               _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                      color: AppColors.primaryText,
+                    ))
                   : ElevatedButton(
-                onPressed: _registerUser,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text("Register", style: TextStyle(fontSize: 18)),
-              ),
+                      onPressed: _registerUser,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: AppColors.elevatedButtonBg,
+                        foregroundColor: AppColors.darkText,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text("Register",
+                          style: TextStyle(fontSize: 18)),
+                    ),
               const SizedBox(height: 20),
               TextButton(
                 onPressed: () {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => const UserLoginScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const UserLoginScreen()),
                   );
                 },
                 child: const Text(
                   "Already have an account? Login here.",
-                  style: TextStyle(color: Color(0xFF3F51B5)),
+                  style: TextStyle(color: AppColors.markerColor), // Blue accent
                 ),
               ),
             ],
@@ -138,13 +201,30 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String labelText, IconData icon, [String? Function(String?)? validator]) {
+  Widget _buildTextField(
+      TextEditingController controller, String labelText, IconData icon,
+      [String? Function(String?)? validator]) {
     return TextFormField(
       controller: controller,
+      style: const TextStyle(color: AppColors.primaryText),
       decoration: InputDecoration(
         labelText: labelText,
-        prefixIcon: Icon(icon, color: Colors.grey),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        labelStyle: const TextStyle(color: AppColors.hintText),
+        prefixIcon: Icon(icon, color: AppColors.hintText),
+        filled: true,
+        fillColor: AppColors.cardSurface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.outlinedButtonColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primaryText),
+        ),
       ),
       validator: validator,
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'booking_screen.dart'; // Make sure this file exists
@@ -9,8 +10,31 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 
-// 💡 The second warning suggested this package for better web performance:
+// 💡 Using the suggested package for better web performance
 // import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
+
+// --- THEME COLORS ---
+class AppColors {
+  static const Color appBackground = Color(0xFF1C1C1E);
+  static const Color cardSurface = Color(0xFF2C2C2E);
+  static const Color appBarColor = Color(0xFF1C1C1E);
+  static const Color searchBarColor = Color(0xFF2C2C2E);
+  static const Color infoItemBg = Color(0xFF3A3A3C);
+
+  static const Color primaryText = Color(0xFFFFFFFF);
+  static const Color secondaryText = Color(0xFFB0B0B5);
+  static const Color hintText = Color(0xFF8E8E93);
+  static const Color darkText = Color(0xFF000000); // For white buttons
+
+  static const Color markerColor = Color(0xFF000000); // Black accent
+  static const Color routeColor = Color.fromARGB(255, 82, 82, 83);
+  static const Color outlinedButtonColor = Color(0xFF8E8E93);
+  static const Color elevatedButtonBg = Color(0xFFFFFFFF);
+
+  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+  static const Color errorRed = Color(0xFFD32F2F); // A dark red for errors
+}
+// --- END THEME COLORS ---
 
 class HomeScreen extends StatefulWidget {
   final String phoneNumber;
@@ -141,7 +165,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(color: AppColors.primaryText),
+          ),
+          backgroundColor: AppColors.errorRed,
+        ),
       );
     }
   }
@@ -210,14 +240,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.appBackground,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text("ParkEasy"),
-        backgroundColor: const Color(0xFF3F51B5),
+        title: Text(
+          "ParkEasy",
+          style: GoogleFonts.poppins(color: AppColors.primaryText),
+        ),
+        backgroundColor: AppColors.appBarColor,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_rounded, color: Colors.white),
+            icon:
+                const Icon(Icons.person_rounded, color: AppColors.primaryText),
             onPressed: () {
               Navigator.push(
                 context,
@@ -240,18 +275,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             children: [
               TileLayer(
+                // --- LIGHT MAP AS REQUESTED ---
                 urlTemplate:
                     "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                // --- FIX: REMOVED SUBDOMAINS AS PER WARNING ---
-                // subdomains: const ['a', 'b', 'c'],
-                // 💡 For web, you could use CancellableTileProvider here
-                // tileProvider: CancellableTileProvider(),
+                tileProvider: NetworkTileProvider(),
               ),
               PolylineLayer(
                 polylines: [
                   Polyline(
                     points: _routePoints,
-                    color: Colors.blue,
+                    color: AppColors.routeColor,
                     strokeWidth: 5,
                   ),
                 ],
@@ -265,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       point: _currentLocation!,
                       child: const Icon(
                         Icons.my_location,
-                        color: Colors.blue,
+                        color: AppColors.markerColor,
                         size: 30,
                       ),
                     ),
@@ -280,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       child: const Icon(
                         Icons.location_pin,
-                        color: Colors.red,
+                        color: AppColors.markerColor, // Use accent color
                         size: 35,
                       ),
                     ),
@@ -308,11 +341,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(
                       vertical: 8.0, horizontal: 12.0),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.cardSurface,
                     borderRadius: BorderRadius.circular(30.0),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: AppColors.shadow,
                         spreadRadius: 1,
                         blurRadius: 10,
                       ),
@@ -322,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     "Distance: ${_routeDistance.toStringAsFixed(1)} km",
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: AppColors.primaryText,
                       fontSize: 14,
                     ),
                   ),
@@ -338,14 +371,17 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SizedBox(
               height: 200,
               child: isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                      color: AppColors.primaryText,
+                    ))
                   : filteredPlaces.isEmpty
                       ? const Center(
                           child: Text(
                             "No parking areas found.",
                             style: TextStyle(
-                              color: Colors.white,
-                              backgroundColor: Colors.black54,
+                              color: AppColors.primaryText,
+                              backgroundColor: Colors.transparent,
                               fontSize: 16,
                             ),
                           ),
@@ -369,11 +405,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSearchSection() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.searchBarColor,
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: AppColors.shadow,
             spreadRadius: 1,
             blurRadius: 10,
           ),
@@ -381,9 +417,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: TextField(
         onChanged: _filterParkingPlaces,
+        style: const TextStyle(color: AppColors.primaryText),
         decoration: const InputDecoration(
           hintText: "Search parking location",
-          prefixIcon: Icon(Icons.search, color: Colors.grey),
+          hintStyle: TextStyle(color: AppColors.hintText),
+          prefixIcon: Icon(Icons.search, color: AppColors.hintText),
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
@@ -399,11 +437,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: AppColors.shadow,
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -416,7 +454,10 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Text(
               place["name"],
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryText),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -446,13 +487,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         _openGoogleMaps(place["lat"], place["lng"]),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      side: const BorderSide(color: Color(0xFF3F51B5)),
+                      side: const BorderSide(
+                          color: AppColors.outlinedButtonColor),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
                     child: const Text(
                       "Directions",
-                      style: TextStyle(fontSize: 16, color: Color(0xFF3F51B5)),
+                      style:
+                          TextStyle(fontSize: 16, color: AppColors.primaryText),
                     ),
                   ),
                 ),
@@ -462,7 +505,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () => _navigateToBookingScreen(context, place),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: const Color(0xFF3F51B5),
+                      backgroundColor: AppColors.elevatedButtonBg,
+                      foregroundColor: AppColors.darkText,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
@@ -501,24 +545,26 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F7FA),
+        color: AppColors.infoItemBg,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: Colors.grey[700]),
+          Icon(icon, size: 20, color: AppColors.secondaryText),
           const SizedBox(width: 6),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 value,
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryText),
               ),
               Text(
                 label,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
               ),
             ],
           ),
@@ -527,7 +573,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- MODIFIED GOOGLE MAPS LAUNCHER ---
+  // --- FIXED GOOGLE MAPS LAUNCHER ---
   Future<void> _openGoogleMaps(double destLat, double destLng) async {
     if (_currentLocation == null) {
       _showErrorSnackBar("Current location not available for directions.");
@@ -537,8 +583,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final double startLat = _currentLocation!.latitude;
     final double startLng = _currentLocation!.longitude;
 
+    // Correct Google Maps URL format
     final String googleMapsUrl =
-        'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$destLat,$destLng&travelmode=driving';
+        'https://www.google.com/maps/dir/?api=1&origin=$startLat,$startLng&destination=$destLat,$destLng';
 
     final Uri url = Uri.parse(googleMapsUrl);
 

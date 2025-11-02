@@ -1,7 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'success_screen.dart';
 import 'dart:async';
+
+// --- THEME COLORS ---
+class AppColors {
+  static const Color appBackground = Color(0xFF1C1C1E);
+  static const Color cardSurface = Color(0xFF2C2C2E);
+  static const Color appBarColor = Color(0xFF1C1C1E);
+  static const Color searchBarColor = Color(0xFF2C2C2E);
+  static const Color infoItemBg = Color(0xFF3A3A3C);
+
+  static const Color primaryText = Color(0xFFFFFFFF);
+  static const Color secondaryText = Color(0xFFB0B0B5);
+  static const Color hintText = Color(0xFF8E8E93);
+  static const Color darkText = Color(0xFF000000); // For white buttons
+
+  static const Color markerColor = Color(0xFF0A84FF); // Blue accent
+  static const Color routeColor = Color(0xFF5AC8FA);
+  static const Color outlinedButtonColor = Color(0xFF8E8E93);
+  static const Color elevatedButtonBg = Color(0xFFFFFFFF);
+
+  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+  static const Color successGreen = Color(0xFF34C759); // iOS-like success green
+}
+// --- END THEME COLORS ---
 
 class SuccessAnimationScreen extends StatefulWidget {
   final String location;
@@ -9,7 +33,6 @@ class SuccessAnimationScreen extends StatefulWidget {
   final List<int> slots;
   final DateTime entryDateTime;
   final String phoneNumber;
-  // Removed exitDateTime as it is no longer collected at booking time.
 
   const SuccessAnimationScreen({
     required this.location,
@@ -35,7 +58,7 @@ class _SuccessAnimationScreenState extends State<SuccessAnimationScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.appBackground,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -49,7 +72,7 @@ class _SuccessAnimationScreenState extends State<SuccessAnimationScreen>
               onLoaded: (composition) {
                 Future.delayed(
                   composition.duration + const Duration(seconds: 1),
-                      () {
+                  () {
                     if (mounted) {
                       Navigator.pushReplacement(
                         context,
@@ -69,12 +92,12 @@ class _SuccessAnimationScreenState extends State<SuccessAnimationScreen>
               },
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               "Booking Confirmed!",
-              style: TextStyle(
+              style: GoogleFonts.poppins(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF3F51B5),
+                color: AppColors.successGreen, // Use success color
               ),
             ),
           ],

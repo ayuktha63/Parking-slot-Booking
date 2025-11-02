@@ -1,13 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'success_screen.dart';
 
-// Import the Razorpay flutter package. Flutter's build system will
-// automatically select the correct platform implementation.
+// Import the Razorpay flutter package.
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+
+// --- THEME COLORS ---
+class AppColors {
+  static const Color appBackground = Color(0xFF1C1C1E);
+  static const Color cardSurface = Color(0xFF2C2C2E);
+  static const Color appBarColor = Color(0xFF1C1C1E);
+  static const Color searchBarColor = Color(0xFF2C2C2E);
+  static const Color infoItemBg = Color(0xFF3A3A3C);
+
+  static const Color primaryText = Color(0xFFFFFFFF);
+  static const Color secondaryText = Color(0xFFB0B0B5);
+  static const Color hintText = Color(0xFF8E8E93);
+  static const Color darkText = Color(0xFF000000); // For white buttons
+
+  static const Color markerColor = Color(0xFF0A84FF); // Blue accent
+  static const Color routeColor = Color(0xFF5AC8FA);
+  static const Color outlinedButtonColor = Color(0xFF8E8E93);
+  static const Color elevatedButtonBg = Color(0xFFFFFFFF);
+
+  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+  static const Color errorRed = Color(0xFFD32F2F); // A dark red for errors
+}
+// --- END THEME COLORS ---
 
 class BookingScreen extends StatefulWidget {
   final String location;
@@ -43,14 +66,8 @@ class _BookingScreenState extends State<BookingScreen> {
   String apiHost = '10.0.2.2';
   List<String> vehicleTypes = ["Car", "Bike"];
 
-  // Razorpay instance
   late Razorpay _razorpay;
-
-  // NOTE: Storing API keys like this is a security risk.
-  // In a production app, these should be handled securely on a server-side.
   final String razorpayKey = "rzp_live_R6QQALUuJwgDaD";
-
-  // Assuming a fixed price per slot for simplicity
   final double pricePerSlot = 1.0;
 
   @override
@@ -61,10 +78,7 @@ class _BookingScreenState extends State<BookingScreen> {
     }
     _fetchParkingAreaDetails();
 
-    // Initialize Razorpay instance with the key
     _razorpay = Razorpay();
-
-    // Set up a single listener for all events
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
@@ -72,14 +86,12 @@ class _BookingScreenState extends State<BookingScreen> {
 
   @override
   void dispose() {
-    // Unregister all listeners before disposing using the clear method
     _razorpay.clear();
     _vehicleNumberController.dispose();
     super.dispose();
   }
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) {
-    // Payment was successful, now confirm the booking
     _showBookingProgressDialog();
     _confirmBooking(response.paymentId);
   }
@@ -149,7 +161,6 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
-  // The main payment initiation function
   void _startPayment() {
     if (selectedVehicle != null &&
         _vehicleNumberController.text.isNotEmpty &&
@@ -208,7 +219,7 @@ class _BookingScreenState extends State<BookingScreen> {
             'number_plate': _vehicleNumberController.text,
             'entry_time': entryDateTime.toIso8601String(),
             'phone': widget.phoneNumber,
-            'payment_id': paymentId, // Pass the payment ID to your backend
+            'payment_id': paymentId,
           }),
         );
 
@@ -258,11 +269,13 @@ class _BookingScreenState extends State<BookingScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF3F51B5),
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.markerColor,
+              onPrimary: AppColors.primaryText,
+              surface: AppColors.cardSurface,
+              onSurface: AppColors.primaryText,
             ),
+            dialogBackgroundColor: AppColors.cardSurface,
           ),
           child: child!,
         );
@@ -280,11 +293,13 @@ class _BookingScreenState extends State<BookingScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF3F51B5),
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.markerColor,
+              onPrimary: AppColors.primaryText,
+              surface: AppColors.cardSurface,
+              onSurface: AppColors.primaryText,
             ),
+            dialogBackgroundColor: AppColors.cardSurface,
           ),
           child: child!,
         );
@@ -300,21 +315,28 @@ class _BookingScreenState extends State<BookingScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          backgroundColor: AppColors.cardSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: const [
-              Icon(Icons.error_outline, color: Colors.red),
+              Icon(Icons.error_outline, color: AppColors.errorRed),
               SizedBox(width: 8),
-              Text("Booking Error"),
+              Text(
+                "Booking Error",
+                style: TextStyle(color: AppColors.primaryText),
+              ),
             ],
           ),
-          content: Text(message),
+          content: Text(
+            message,
+            style: const TextStyle(color: AppColors.primaryText),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child:
-                  const Text("OK", style: TextStyle(color: Color(0xFF3F51B5))),
+              child: const Text("OK",
+                  style: TextStyle(color: AppColors.markerColor)),
             ),
           ],
         );
@@ -328,13 +350,17 @@ class _BookingScreenState extends State<BookingScreen> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
+          backgroundColor: AppColors.cardSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           content: Row(
             children: const [
-              CircularProgressIndicator(),
+              CircularProgressIndicator(color: AppColors.primaryText),
               SizedBox(width: 20),
-              Text("Confirming booking..."),
+              Text(
+                "Confirming booking...",
+                style: TextStyle(color: AppColors.primaryText),
+              ),
             ],
           ),
         );
@@ -345,11 +371,12 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.appBackground,
       appBar: AppBar(
         title: const Text("Book a Parking Spot"),
         elevation: 0,
-        backgroundColor: const Color(0xFF3F51B5),
+        backgroundColor: AppColors.appBarColor,
+        foregroundColor: AppColors.primaryText,
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -358,7 +385,7 @@ class _BookingScreenState extends State<BookingScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
-                color: Color(0xFF3F51B5),
+                color: AppColors.appBarColor, // Match AppBar
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -369,8 +396,8 @@ class _BookingScreenState extends State<BookingScreen> {
                 children: [
                   Text(
                     "Book at ${widget.location}",
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: GoogleFonts.poppins(
+                      color: AppColors.primaryText,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
@@ -378,8 +405,8 @@ class _BookingScreenState extends State<BookingScreen> {
                   const SizedBox(height: 8),
                   Text(
                     "Reserve your parking space now",
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                    style: GoogleFonts.poppins(
+                      color: AppColors.secondaryText,
                       fontSize: 14,
                     ),
                   ),
@@ -405,11 +432,11 @@ class _BookingScreenState extends State<BookingScreen> {
                   const SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.cardSurface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: AppColors.shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -423,27 +450,28 @@ class _BookingScreenState extends State<BookingScreen> {
                             decoration: InputDecoration(
                               labelText: "Select Vehicle Type",
                               labelStyle:
-                                  const TextStyle(color: Color(0xFF3F51B5)),
+                                  const TextStyle(color: AppColors.hintText),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    BorderSide(color: Colors.grey[300]!),
+                                borderSide: BorderSide.none,
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    BorderSide(color: Colors.grey[300]!),
+                                borderSide: const BorderSide(
+                                    color: AppColors.outlinedButtonColor),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    const BorderSide(color: Color(0xFF3F51B5)),
+                                borderSide: const BorderSide(
+                                    color: AppColors.primaryText),
                               ),
                               prefixIcon: const Icon(Icons.directions_car,
-                                  color: Color(0xFF3F51B5)),
+                                  color: AppColors.hintText),
                               filled: true,
-                              fillColor: Colors.white,
+                              fillColor: AppColors.infoItemBg,
                             ),
+                            style:
+                                const TextStyle(color: AppColors.primaryText),
                             value: selectedVehicle,
                             items: vehicleTypes.map((vehicle) {
                               return DropdownMenuItem(
@@ -458,30 +486,47 @@ class _BookingScreenState extends State<BookingScreen> {
                                       selectedSlotIds.clear();
                                       _fetchAllSlots();
                                     }),
-                            dropdownColor: Colors.white,
+                            dropdownColor: AppColors.cardSurface,
                             icon: const Icon(Icons.arrow_drop_down,
-                                color: Color(0xFF3F51B5)),
-                            disabledHint:
-                                const Text("No available vehicle types"),
+                                color: AppColors.hintText),
+                            disabledHint: const Text(
+                              "No available vehicle types",
+                              style: TextStyle(color: AppColors.hintText),
+                            ),
                           ),
                           if (selectedVehicle != null) ...[
                             const SizedBox(height: 16),
                             TextField(
                               controller: _vehicleNumberController,
+                              style:
+                                  const TextStyle(color: AppColors.primaryText),
                               decoration: InputDecoration(
                                 labelText: selectedVehicle == "Car"
                                     ? "Car Number Plate"
                                     : "Bike Number Plate",
+                                labelStyle:
+                                    const TextStyle(color: AppColors.hintText),
                                 border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12)),
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.outlinedButtonColor),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.primaryText),
+                                ),
                                 prefixIcon: Icon(
                                   selectedVehicle == "Car"
                                       ? Icons.directions_car
                                       : Icons.motorcycle,
-                                  color: const Color(0xFF3F51B5),
+                                  color: AppColors.hintText,
                                 ),
                                 filled: true,
-                                fillColor: Colors.grey[100],
+                                fillColor: AppColors.infoItemBg,
                               ),
                             ),
                           ],
@@ -490,15 +535,15 @@ class _BookingScreenState extends State<BookingScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  _buildSectionTitle("Entry & Exit Timing"),
+                  _buildSectionTitle("Entry Timing"),
                   const SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.cardSurface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: AppColors.shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -512,19 +557,19 @@ class _BookingScreenState extends State<BookingScreen> {
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               border: Border(
-                                  bottom: BorderSide(color: Colors.grey[200]!)),
+                                  bottom: BorderSide(
+                                      color: AppColors.appBackground)),
                             ),
                             child: Row(
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5)
-                                        .withOpacity(0.1),
+                                    color: AppColors.infoItemBg,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: const Icon(Icons.calendar_today,
-                                      color: Color(0xFF3F51B5)),
+                                      color: AppColors.markerColor),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
@@ -536,22 +581,24 @@ class _BookingScreenState extends State<BookingScreen> {
                                         "Entry Date",
                                         style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.grey[600]),
+                                            color: AppColors.secondaryText),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         startDate != null
                                             ? "${startDate!.day}/${startDate!.month}/${startDate!.year}"
                                             : "Select Entry Date",
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 16,
+                                          color: AppColors.primaryText,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
                                 const Icon(Icons.arrow_forward_ios,
-                                    size: 16, color: Colors.grey),
+                                    size: 16, color: AppColors.hintText),
                               ],
                             ),
                           ),
@@ -565,12 +612,11 @@ class _BookingScreenState extends State<BookingScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF3F51B5)
-                                        .withOpacity(0.1),
+                                    color: AppColors.infoItemBg,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: const Icon(Icons.access_time,
-                                      color: Color(0xFF3F51B5)),
+                                      color: AppColors.markerColor),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
@@ -582,22 +628,24 @@ class _BookingScreenState extends State<BookingScreen> {
                                         "Entry Time",
                                         style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.grey[600]),
+                                            color: AppColors.secondaryText),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         startTime != null
                                             ? startTime!.format(context)
                                             : "Select Entry Time",
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 16,
+                                          color: AppColors.primaryText,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
                                 const Icon(Icons.arrow_forward_ios,
-                                    size: 16, color: Colors.grey),
+                                    size: 16, color: AppColors.hintText),
                               ],
                             ),
                           ),
@@ -611,11 +659,11 @@ class _BookingScreenState extends State<BookingScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.cardSurface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: AppColors.shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -627,22 +675,32 @@ class _BookingScreenState extends State<BookingScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildLegendItem(Colors.grey[300]!, "Available"),
+                            _buildLegendItem(AppColors.infoItemBg, "Available"),
+                            _buildLegendItem(AppColors.markerColor, "Selected"),
                             _buildLegendItem(
-                                const Color(0xFF4CAF50), "Selected"),
-                            _buildLegendItem(Colors.red[300]!, "Booked"),
+                                AppColors.outlinedButtonColor, "Booked"),
                           ],
                         ),
                         const SizedBox(height: 20),
                         isLoading
-                            ? const Center(child: CircularProgressIndicator())
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                color: AppColors.primaryText,
+                              ))
                             : selectedVehicle == null
                                 ? const Center(
-                                    child: Text("Please select a vehicle type"))
+                                    child: Text(
+                                    "Please select a vehicle type",
+                                    style: TextStyle(
+                                        color: AppColors.secondaryText),
+                                  ))
                                 : allSlots.isEmpty
                                     ? const Center(
                                         child: Text(
-                                            "No slots found for this vehicle type"))
+                                            "No slots found for this vehicle type",
+                                            style: TextStyle(
+                                                color:
+                                                    AppColors.secondaryText)))
                                     : Wrap(
                                         spacing: 10.0,
                                         runSpacing: 10.0,
@@ -675,18 +733,18 @@ class _BookingScreenState extends State<BookingScreen> {
                                               height: 65,
                                               decoration: BoxDecoration(
                                                 color: isBooked
-                                                    ? Colors.red[300]
+                                                    ? AppColors
+                                                        .outlinedButtonColor
                                                     : isSelected
-                                                        ? const Color(
-                                                            0xFF4CAF50)
-                                                        : Colors.grey[300],
+                                                        ? AppColors.markerColor
+                                                        : AppColors.infoItemBg,
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 boxShadow: isSelected
                                                     ? [
                                                         BoxShadow(
-                                                          color: const Color(
-                                                                  0xFF4CAF50)
+                                                          color: AppColors
+                                                              .markerColor
                                                               .withOpacity(0.4),
                                                           blurRadius: 8,
                                                           offset: const Offset(
@@ -700,9 +758,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                                   "$slotNumber",
                                                   style: TextStyle(
                                                     color:
-                                                        isBooked || isSelected
-                                                            ? Colors.white
-                                                            : Colors.black,
+                                                        AppColors.primaryText,
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16,
                                                   ),
@@ -721,7 +777,8 @@ class _BookingScreenState extends State<BookingScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: const Color(0xFF3F51B5),
+                        backgroundColor: AppColors.elevatedButtonBg,
+                        foregroundColor: AppColors.darkText,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -729,8 +786,8 @@ class _BookingScreenState extends State<BookingScreen> {
                       onPressed:
                           _startPayment, // Change here to call the payment function
                       child: Text(
-                        "Pay and Confirm Booking (${selectedSlotIds.length * pricePerSlot})",
-                        style: const TextStyle(
+                        "Pay and Confirm (\u20B9${selectedSlotIds.length * pricePerSlot})",
+                        style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -754,17 +811,17 @@ class _BookingScreenState extends State<BookingScreen> {
           width: 4,
           height: 20,
           decoration: BoxDecoration(
-            color: const Color(0xFF3F51B5),
+            color: AppColors.markerColor, // Use accent color
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: GoogleFonts.poppins(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF303030),
+            color: AppColors.primaryText,
           ),
         ),
       ],
@@ -785,7 +842,8 @@ class _BookingScreenState extends State<BookingScreen> {
         const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style:
+              GoogleFonts.poppins(fontSize: 12, color: AppColors.secondaryText),
         ),
       ],
     );
@@ -796,28 +854,28 @@ class _BookingScreenState extends State<BookingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: AppColors.infoItemBg,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: Colors.white),
+          Icon(icon, size: 20, color: AppColors.primaryText),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 "$available / ${available + booked}",
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: AppColors.primaryText,
                 ),
               ),
               Text(
                 "$label (Avail/Total)",
-                style: TextStyle(
-                    fontSize: 12, color: Colors.white.withOpacity(0.85)),
+                style: GoogleFonts.poppins(
+                    fontSize: 12, color: AppColors.secondaryText),
               ),
             ],
           ),

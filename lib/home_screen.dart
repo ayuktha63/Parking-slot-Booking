@@ -5,9 +5,14 @@ import 'booking_screen.dart';
 import 'profile_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// --- NEW IMPORTS ---
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+// ---
+
 class HomeScreen extends StatefulWidget {
   final String phoneNumber;
-
   const HomeScreen({super.key, required this.phoneNumber});
 
   @override
@@ -18,84 +23,101 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> parkingPlaces = [];
   List<Map<String, dynamic>> filteredPlaces = [];
   bool isLoading = true;
-  String apiHost = '10.0.2.2'; // Default for Android Emulator
+  String apiHost = '10.0.2.2'; // Main API (Port 3000)
+  String apiHostRouting = '10.0.2.2:3001'; // A* Routing API (Port 3001)
+
+  // --- NEW STATE VARIABLES ---
+  final MapController _mapController = MapController();
+  final PageController _pageController = PageController(viewportFraction: 0.85);
+  LatLng? _currentLocation;
+  List<LatLng> _routePoints = [];
+  int _currentPageIndex = 0;
+  // ---
 
   @override
   void initState() {
     super.initState();
-    // Use 127.0.0.1 for web, 10.0.2.2 for Android emulator, or your machine's IP
     if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
       apiHost = '127.0.0.1';
+      apiHostRouting = '127.0.0.1:3001';
     }
-    _fetchParkingAreas();
+    _initializeScreen();
+  }
+
+  Future<void> _initializeScreen() async {
+    setState(() => isLoading = true);
+    await _getCurrentLocation();
+    await _fetchParkingAreas();
+    setState(() => isLoading = false);
+
+    // After fetching, show route for the first item
+    if (filteredPlaces.isNotEmpty) {
+      _onPageChanged(0);
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _showErrorSnackBar("Location services are disabled.");
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        _showErrorSnackBar("Location permissions are denied.");
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      _showErrorSnackBar("Location permissions are permanently denied.");
+      return;
+    }
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+      setState(() {
+        _currentLocation = LatLng(position.latitude, position.longitude);
+      });
+      _mapController.move(_currentLocation!, 15.0);
+    } catch (e) {
+      _showErrorSnackBar("Failed to get current location: $e");
+    }
   }
 
   Future<void> _fetchParkingAreas() async {
-    setState(() => isLoading = true);
+    // This function is mostly the same, just simplified
     try {
-      final response = await http.get(Uri.parse('http://$apiHost:3000/api/parking_areas'));
+      final response =
+          await http.get(Uri.parse('http://$apiHost:3000/api/parking_areas'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        List<Map<String, dynamic>> tempPlaces = [];
-
-        for (var area in data) {
-          final carSlotsResponse = await http.get(Uri.parse(
-              'http://$apiHost:3000/api/parking_areas/${area['_id']}/slots?vehicle_type=car'));
-          final bikeSlotsResponse = await http.get(Uri.parse(
-              'http://$apiHost:3000/api/parking_areas/${area['_id']}/slots?vehicle_type=bike'));
-
-          int availableCars = 0;
-          int availableBikes = 0;
-
-          if (carSlotsResponse.statusCode == 200) {
-            final carSlots = jsonDecode(carSlotsResponse.body);
-            availableCars =
-                carSlots.where((slot) => slot['is_booked'] == false).length;
-          } else {
-            print(
-                'Failed to fetch car slots for ${area['_id']}: ${carSlotsResponse.statusCode}');
-          }
-
-          if (bikeSlotsResponse.statusCode == 200) {
-            final bikeSlots = jsonDecode(bikeSlotsResponse.body);
-            availableBikes =
-                bikeSlots.where((slot) => slot['is_booked'] == false).length;
-          } else {
-            print(
-                'Failed to fetch bike slots for ${area['_id']}: ${bikeSlotsResponse.statusCode}');
-          }
-
-          tempPlaces.add({
-            "_id": area['_id'],
-            "name": area['name'],
-            "cars": availableCars,
-            "bikes": availableBikes,
-            "lat": area['location']['lat'].toDouble(), // Fetch latitude
-            "lng": area['location']['lng'].toDouble(), // Fetch longitude
-          });
-        }
-
         setState(() {
-          parkingPlaces = tempPlaces;
+          parkingPlaces = data
+              .map((area) => {
+                    "_id": area['_id'],
+                    "name": area['name'],
+                    "cars": area['available_car_slots'] ?? 0,
+                    "bikes": area['available_bike_slots'] ?? 0,
+                    "lat": area['location']['lat'].toDouble(),
+                    "lng": area['location']['lng'].toDouble(),
+                  })
+              .toList();
           filteredPlaces = List.from(parkingPlaces);
-          isLoading = false;
         });
       } else {
-        print(
-            'Failed to fetch parking areas: ${response.statusCode}, Body: ${response.body}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-              Text("Failed to load parking areas: ${response.statusCode}")),
-        );
-        setState(() => isLoading = false);
+        _showErrorSnackBar(
+            "Failed to load parking areas: ${response.statusCode}");
       }
     } catch (error) {
-      print('Error fetching parking areas: $error');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading parking areas: $error")),
-      );
-      setState(() => isLoading = false);
+      _showErrorSnackBar("Error loading parking areas: $error");
     }
   }
 
@@ -106,22 +128,104 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         filteredPlaces = parkingPlaces
             .where((place) =>
-            place["name"].toLowerCase().contains(query.toLowerCase()))
+                place["name"].toLowerCase().contains(query.toLowerCase()))
             .toList();
+      }
+      // After filtering, update route for the first item in the new list
+      _routePoints.clear();
+      if (filteredPlaces.isNotEmpty) {
+        _pageController.jumpToPage(0);
+        _onPageChanged(0);
       }
     });
   }
 
-  Future<void> _openGoogleMaps(double lat, double lng) async {
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not open Google Maps")),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
   }
+
+  // --- NEW ROUTING FUNCTIONS ---
+
+  void _onPageChanged(int index) {
+    setState(() {
+      _currentPageIndex = index;
+    });
+    final place = filteredPlaces[index];
+    _fetchAndDisplayRoute(place["lat"], place["lng"]);
+  }
+
+  Future<String?> _getNearestNodeId(double lat, double lng) async {
+    try {
+      final response = await http.get(
+          Uri.parse('http://$apiHostRouting/nearest-node?lat=$lat&lng=$lng'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['nodeId'];
+      }
+    } catch (e) {
+      print("Error fetching nearest node: $e");
+    }
+    return null;
+  }
+
+  Future<void> _fetchAndDisplayRoute(double destLat, double destLng) async {
+    if (_currentLocation == null) {
+      _showErrorSnackBar("Current location not available. Cannot fetch route.");
+      return;
+    }
+
+    // 1. Get nearest node for start (user's location)
+    final startId = await _getNearestNodeId(
+        _currentLocation!.latitude, _currentLocation!.longitude);
+
+    // 2. Get nearest node for end (parking location)
+    final endId = await _getNearestNodeId(destLat, destLng);
+
+    if (startId == null || endId == null) {
+      _showErrorSnackBar("Could not find nodes for routing.");
+      return;
+    }
+
+    // 3. Get the route from your A* server
+    try {
+      final response = await http.post(
+        Uri.parse('http://$apiHostRouting/route'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'start': startId, 'end': endId}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> coordinates = data['coordinates'];
+        final List<LatLng> route = coordinates
+            .map((c) => LatLng(c['lat'].toDouble(), c['lon'].toDouble()))
+            .toList();
+
+        setState(() {
+          _routePoints = route;
+        });
+
+        // Fit map to show the entire route
+        if (route.isNotEmpty) {
+          _mapController.fitCamera(
+            CameraFit.coordinates(
+              coordinates: [_currentLocation!, ...route],
+              padding: const EdgeInsets.all(50.0),
+            ),
+          );
+        }
+      } else {
+        _showErrorSnackBar("Failed to get route: ${response.body}");
+      }
+    } catch (e) {
+      _showErrorSnackBar("Error fetching route: $e");
+    }
+  }
+
+  // ---
 
   @override
   Widget build(BuildContext context) {
@@ -137,184 +241,204 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ProfileScreen(phoneNumber: widget.phoneNumber)),
+                MaterialPageRoute(
+                    builder: (context) =>
+                        ProfileScreen(phoneNumber: widget.phoneNumber)),
               );
             },
           ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSearchSection(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Text(
-                "Available Parking Spots",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF303030),
-                ),
-              ),
+      body: Stack(
+        children: [
+          // --- MAP BACKGROUND ---
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _currentLocation ??
+                  const LatLng(8.5241, 76.9366), // Fallback center
+              initialZoom: 14.0,
             ),
-            Expanded(
+            children: [
+              TileLayer(
+                urlTemplate:
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                subdomains: const ['a', 'b', 'c'],
+              ),
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: _routePoints,
+                    color: Colors.blue,
+                    strokeWidth: 5,
+                  ),
+                ],
+              ),
+              MarkerLayer(
+                markers: [
+                  // User's Location Marker
+                  if (_currentLocation != null)
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: _currentLocation!,
+                      child: const Icon(
+                        Icons.my_location,
+                        color: Colors.blue,
+                        size: 30,
+                      ),
+                    ),
+                  // Destination Marker
+                  if (filteredPlaces.isNotEmpty)
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: LatLng(
+                        filteredPlaces[_currentPageIndex]["lat"],
+                        filteredPlaces[_currentPageIndex]["lng"],
+                      ),
+                      child: const Icon(
+                        Icons.location_pin,
+                        color: Colors.red,
+                        size: 35,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+
+          // --- SEARCH BAR ---
+          Positioned(
+            top: 10,
+            left: 15,
+            right: 15,
+            child: _buildSearchSection(),
+          ),
+
+          // --- HORIZONTAL SCROLLING PARKING LIST ---
+          Positioned(
+            bottom: 20,
+            left: 0,
+            right: 0,
+            child: SizedBox(
+              height: 200, // Adjust height as needed
               child: isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : filteredPlaces.isEmpty
-                  ? const Center(child: Text("No parking areas available"))
-                  : ListView.builder(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
-                itemCount: filteredPlaces.length,
-                itemBuilder: (context, index) {
-                  final place = filteredPlaces[index];
-                  return _buildParkingCard(context, place);
-                },
-              ),
+                      ? const Center(
+                          child: Text(
+                            "No parking areas found.",
+                            style: TextStyle(
+                              color: Colors.white,
+                              backgroundColor: Colors.black54,
+                              fontSize: 16,
+                            ),
+                          ),
+                        )
+                      : PageView.builder(
+                          controller: _pageController,
+                          itemCount: filteredPlaces.length,
+                          onPageChanged: _onPageChanged,
+                          itemBuilder: (context, index) {
+                            final place = filteredPlaces[index];
+                            return _buildParkingCard(context, place);
+                          },
+                        ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSearchSection() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Find your best",
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-          ),
-          Text(
-            "Parking Space",
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF303030),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  spreadRadius: 1,
-                  blurRadius: 10,
-                ),
-              ],
-            ),
-            child: TextField(
-              onChanged: _filterParkingPlaces,
-              decoration: const InputDecoration(
-                hintText: "Search parking location",
-                prefixIcon: Icon(Icons.search, color: Colors.grey),
-                border: InputBorder.none,
-                contentPadding:
-                EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-            ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 10,
           ),
         ],
+      ),
+      child: TextField(
+        onChanged: _filterParkingPlaces,
+        decoration: const InputDecoration(
+          hintText: "Search parking location",
+          prefixIcon: Icon(Icons.search, color: Colors.grey),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
       ),
     );
   }
 
+  // --- MODIFIED PARKING CARD ---
   Widget _buildParkingCard(BuildContext context, Map<String, dynamic> place) {
     final carSlotsText = place["cars"] == 0 ? "Full" : place["cars"].toString();
     final bikeSlotsText =
-    place["bikes"] == 0 ? "Full" : place["bikes"].toString();
+        place["bikes"] == 0 ? "Full" : place["bikes"].toString();
 
     return Container(
-      margin: const EdgeInsets.only(
-          bottom: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          ListTile(
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3F51B5).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.local_parking,
-                color: Color(0xFF3F51B5),
-                size: 28,
-              ),
-            ),
-            title: Text(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
               place["name"],
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            const SizedBox(height: 10),
+            Row(
               children: [
                 _buildInfoItem(
                   icon: Icons.directions_car,
                   value: carSlotsText,
                   label: "Cars",
                 ),
+                const SizedBox(width: 12),
                 _buildInfoItem(
                   icon: Icons.motorcycle,
                   value: bikeSlotsText,
                   label: "Bikes",
                 ),
-                Column(
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => _navigateToBookingScreen(context, place),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
-                        backgroundColor: const Color(0xFF3F51B5),
-                      ),
-                      child: const Text("Book Now"),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton(
-                      onPressed: () =>
-                          _openGoogleMaps(place["lat"], place["lng"]),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
-                        side: const BorderSide(color: Color(0xFF3F51B5)),
-                      ),
-                      child: const Text(
-                        "Get Location",
-                        style: TextStyle(color: Color(0xFF3F51B5)),
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
-          ),
-        ],
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => _navigateToBookingScreen(context, place),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: const Color(0xFF3F51B5),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text("Book Now", style: TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -327,7 +451,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => BookingScreen(
           location: place["name"],
           parkingId: place["_id"],
-          phoneNumber: widget.phoneNumber, // Pass phoneNumber
+          phoneNumber: widget.phoneNumber,
         ),
       ),
     ).then((_) {
@@ -339,7 +463,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildInfoItem(
       {required IconData icon, required String value, required String label}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F7FA),
         borderRadius: BorderRadius.circular(10),
@@ -354,7 +478,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 value,
                 style:
-                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
               Text(
                 label,
@@ -365,5 +489,16 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  // Not used in this layout, but keeping it
+  Future<void> _openGoogleMaps(double lat, double lng) async {
+    final url =
+        Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      _showErrorSnackBar("Could not open Google Maps");
+    }
   }
 }

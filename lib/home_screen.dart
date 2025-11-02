@@ -409,7 +409,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             // --- MODIFIED ---
             // Was 20, changed to 80 to be above the new BottomNavigationBar
-            bottom: 80,
+            bottom: 10,
             left: 0,
             right: 0,
             child: SizedBox(

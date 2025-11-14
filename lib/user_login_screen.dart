@@ -97,7 +97,7 @@ class UserLoginScreen extends StatefulWidget {
 class _UserLoginScreenState extends State<UserLoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
-  String apiHost = '10.0.2.2'; // Default for Android Emulator
+  String apiHost = '192.168.1.2'; // Default for Android Emulator
 
   @override
   void initState() {

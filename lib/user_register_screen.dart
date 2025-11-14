@@ -40,7 +40,7 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
   final TextEditingController _carController = TextEditingController();
   final TextEditingController _bikeController = TextEditingController();
   bool _isLoading = false;
-  String apiHost = '10.0.2.2'; // Default for Android Emulator
+  String apiHost = '192.168.1.2'; // Default for Android Emulator
 
   @override
   void initState() {

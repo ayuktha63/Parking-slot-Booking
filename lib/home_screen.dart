@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> parkingPlaces = [];
   List<Map<String, dynamic>> filteredPlaces = [];
   bool isLoading = true;
-  String apiHost = '10.0.2.2'; // Main API (Port 3000)
+  String apiHost = '192.168.1.2';
 
   final MapController _mapController = MapController();
   final PageController _pageController = PageController(viewportFraction: 0.85);

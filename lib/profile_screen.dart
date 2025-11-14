@@ -55,7 +55,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late Map<String, dynamic> _userData;
-  String apiHost = '10.0.2.2';
+  String apiHost = '192.168.1.2';
 
   @override
   void initState() {
@@ -298,7 +298,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
-  String apiHost = '10.0.2.2';
+  String apiHost = '192.168.1.2';
 
   // ADDED: State for BottomNavBar
   int _bottomNavIndex = 2; // Profile is the 3rd item (index 2)

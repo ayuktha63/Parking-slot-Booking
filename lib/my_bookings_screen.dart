@@ -40,13 +40,13 @@ class MyBookingsScreen extends StatefulWidget {
 class _MyBookingsScreenState extends State<MyBookingsScreen> {
   List<dynamic> _bookings = [];
   bool _isLoading = true;
-  String apiHost = '10.0.2.2';
+  String apiHost = '192.168.1.2';
 
   @override
   void initState() {
     super.initState();
     if (kIsWeb) {
-      apiHost = '127.0.0.1';
+      apiHost = '192.168.1.2';
     }
     _fetchMyBookings();
   }

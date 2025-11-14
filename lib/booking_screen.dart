@@ -64,7 +64,7 @@ class _BookingScreenState extends State<BookingScreen> {
   int bookedCarSlots = 0;
   int availableBikeSlots = 0;
   int bookedBikeSlots = 0;
-  String apiHost = '10.0.2.2';
+  String apiHost = '192.168.1.2';
   List<String> vehicleTypes = ["Car", "Bike"];
 
   late Razorpay _razorpay;

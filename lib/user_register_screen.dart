@@ -40,7 +40,8 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
   final TextEditingController _carController = TextEditingController();
   final TextEditingController _bikeController = TextEditingController();
   bool _isLoading = false;
-  String apiHost = '192.168.1.2'; // Default for Android Emulator
+  String apiHost =
+      'backend-parking-bk8y.onrender.com'; // Default for Android Emulator
 
   @override
   void initState() {
@@ -65,7 +66,7 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
 
       try {
         final response = await http.post(
-          Uri.parse('http://$apiHost:3000/api/users/register'),
+          Uri.parse('https://$apiHost/api/users/register'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(userData),
         );

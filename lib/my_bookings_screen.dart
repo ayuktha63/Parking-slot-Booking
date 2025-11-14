@@ -40,7 +40,7 @@ class MyBookingsScreen extends StatefulWidget {
 class _MyBookingsScreenState extends State<MyBookingsScreen> {
   List<dynamic> _bookings = [];
   bool _isLoading = true;
-  String apiHost = '192.168.1.2';
+  String apiHost = 'backend-parking-bk8y.onrender.com';
 
   @override
   void initState() {
@@ -71,8 +71,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     });
     try {
       final response = await http.get(
-        Uri.parse(
-            'http://$apiHost:3000/api/users/bookings/${widget.phoneNumber}'),
+        Uri.parse('https://$apiHost/api/users/bookings/${widget.phoneNumber}'),
       );
       if (response.statusCode == 200) {
         setState(() {

@@ -55,7 +55,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late Map<String, dynamic> _userData;
-  String apiHost = '192.168.1.2';
+  String apiHost = 'backend-parking-bk8y.onrender.com';
 
   @override
   void initState() {
@@ -84,7 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _updateName(String name) async {
     try {
       final response = await http.put(
-        Uri.parse('http://$apiHost:3000/api/users/profile'),
+        Uri.parse('https://$apiHost/api/users/profile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': widget.phoneNumber,
@@ -298,7 +298,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
-  String apiHost = '192.168.1.2';
+  String apiHost = 'backend-parking-bk8y.onrender.com';
 
   // ADDED: State for BottomNavBar
   int _bottomNavIndex = 2; // Profile is the 3rd item (index 2)
@@ -332,8 +332,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
     try {
       final response = await http.get(
-        Uri.parse(
-            'http://$apiHost:3000/api/users/profile/${widget.phoneNumber}'),
+        Uri.parse('https://$apiHost/api/users/profile/${widget.phoneNumber}'),
       );
       if (response.statusCode == 200) {
         setState(() {

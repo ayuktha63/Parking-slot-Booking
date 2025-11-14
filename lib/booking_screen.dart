@@ -64,7 +64,8 @@ class _BookingScreenState extends State<BookingScreen> {
   int bookedCarSlots = 0;
   int availableBikeSlots = 0;
   int bookedBikeSlots = 0;
-  String apiHost = '192.168.1.2';
+  String apiHost = 'backend-parking-bk8y.onrender.com';
+
   List<String> vehicleTypes = ["Car", "Bike"];
 
   late Razorpay _razorpay;
@@ -109,7 +110,7 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => isLoading = true);
     try {
       final response = await http.get(
-        Uri.parse('http://$apiHost:3000/api/parking_areas/${widget.parkingId}'),
+        Uri.parse('https://$apiHost/api/parking_areas/${widget.parkingId}'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -145,7 +146,7 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => isLoading = true);
     try {
       final url =
-          'http://$apiHost:3000/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
+          'https://$apiHost/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         setState(() {
@@ -211,7 +212,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
       for (String slotId in selectedSlotIds) {
         final response = await http.post(
-          Uri.parse('http://$apiHost:3000/api/bookings'),
+          Uri.parse('https://$apiHost/api/bookings'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'parking_id': widget.parkingId,

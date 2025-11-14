@@ -97,7 +97,8 @@ class UserLoginScreen extends StatefulWidget {
 class _UserLoginScreenState extends State<UserLoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
-  String apiHost = '192.168.1.2'; // Default for Android Emulator
+  String apiHost = 'backend-parking-bk8y.onrender.com';
+  // Default for Android Emulator
 
   @override
   void initState() {
@@ -126,7 +127,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
   Future<bool> _registerOrLoginUser(String phoneNumber) async {
     try {
       final response = await http.post(
-        Uri.parse('http://$apiHost:3000/api/users/register'),
+        Uri.parse('https://$apiHost/api/users/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': phoneNumber,

@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> parkingPlaces = [];
   List<Map<String, dynamic>> filteredPlaces = [];
   bool isLoading = true;
-  String apiHost = '192.168.1.2';
+  String apiHost = 'backend-parking-bk8y.onrender.com';
 
   final MapController _mapController = MapController();
   final PageController _pageController = PageController(viewportFraction: 0.85);
@@ -123,7 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchParkingAreas() async {
     try {
       final response =
-          await http.get(Uri.parse('http://$apiHost:3000/api/parking_areas'));
+          await http.get(Uri.parse('https://$apiHost/api/parking_areas'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {

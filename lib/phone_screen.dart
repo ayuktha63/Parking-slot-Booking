@@ -89,7 +89,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
   Future<void> _registerOrLoginUser(String phoneNumber) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/users/register'),
+        Uri.parse('http://localhos/api/users/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': phoneNumber,
@@ -109,7 +109,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
     String phoneNumber = _phoneController.text.trim();
 
     await _registerOrLoginUser(phoneNumber);
-    
+
     // Immediately navigate to HomeScreen without waiting for Firebase OTP
     if (mounted) {
       setState(() => _isLoading = false);

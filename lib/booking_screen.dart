@@ -53,7 +53,9 @@ class _BookingScreenState extends State<BookingScreen> {
   String? selectedVehicle;
   DateTime? startDate;
   TimeOfDay? startTime;
-  Set<String> selectedSlotIds = {};
+  // --- UPDATED: Use Set<int> to track selected slot numbers (Hybrid Model) ---
+  Set<int> selectedSlotNumbers = {};
+  // --------------------------------------------------------------------------
   final TextEditingController _vehicleNumberController =
       TextEditingController();
   List<dynamic> allSlots = [];
@@ -65,6 +67,7 @@ class _BookingScreenState extends State<BookingScreen> {
   int availableBikeSlots = 0;
   int bookedBikeSlots = 0;
   String apiHost = 'backend-parking-bk8y.onrender.com';
+  String apiScheme = 'https'; // Default to https
 
   List<String> vehicleTypes = ["Car", "Bike"];
 
@@ -75,8 +78,11 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      apiHost = '127.0.0.1';
+    // Host setup
+    if (kIsWeb &&
+        (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1')) {
+      apiHost = '127.0.0.1:3000';
+      apiScheme = 'http';
     }
     _fetchParkingAreaDetails();
 
@@ -110,7 +116,8 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => isLoading = true);
     try {
       final response = await http.get(
-        Uri.parse('https://$apiHost/api/parking_areas/${widget.parkingId}'),
+        Uri.parse(
+            '$apiScheme://$apiHost/api/parking_areas/${widget.parkingId}'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -119,11 +126,13 @@ class _BookingScreenState extends State<BookingScreen> {
           totalBikeSlots = data['total_bike_slots'] ?? 0;
           availableCarSlots = data['available_car_slots'] ?? 0;
           availableBikeSlots = data['available_bike_slots'] ?? 0;
+          // Note: Backend now tracks booked_slots dynamically
           bookedCarSlots = totalCarSlots - availableCarSlots;
           bookedBikeSlots = totalBikeSlots - availableBikeSlots;
+
           vehicleTypes = [];
-          if (availableCarSlots > 0) vehicleTypes.add("Car");
-          if (availableBikeSlots > 0) vehicleTypes.add("Bike");
+          if (totalCarSlots > bookedCarSlots) vehicleTypes.add("Car");
+          if (totalBikeSlots > bookedBikeSlots) vehicleTypes.add("Bike");
         });
         if (selectedVehicle != null) {
           await _fetchAllSlots();
@@ -146,7 +155,7 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => isLoading = true);
     try {
       final url =
-          'https://$apiHost/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
+          '$apiScheme://$apiHost/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         setState(() {
@@ -164,19 +173,24 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   void _startPayment() {
+    // --- UPDATED: Use selectedSlotNumbers ---
     if (selectedVehicle != null &&
         _vehicleNumberController.text.isNotEmpty &&
-        selectedSlotIds.isNotEmpty &&
+        selectedSlotNumbers.isNotEmpty &&
         startDate != null &&
         startTime != null) {
-      final int totalAmount = (selectedSlotIds.length * pricePerSlot * 100)
+      final int totalAmount = (selectedSlotNumbers.length * pricePerSlot * 100)
           .toInt(); // Amount in paise
+      // ----------------------------------------
 
       var options = {
         'key': razorpayKey,
         'amount': totalAmount,
         'name': 'ParkEasy Booking',
-        'description': 'Parking Booking for ${selectedSlotIds.length} slots',
+        // --- UPDATED: Use selectedSlotNumbers.length ---
+        'description':
+            'Parking Booking for ${selectedSlotNumbers.length} slots',
+        // ------------------------------------------------
         'prefill': {
           'contact': widget.phoneNumber,
           'email': 'testuser@razorpay.com'
@@ -184,7 +198,9 @@ class _BookingScreenState extends State<BookingScreen> {
         'notes': {
           'location': widget.location,
           'vehicle_type': selectedVehicle,
-          'slots': selectedSlotIds.join(','),
+          // --- UPDATED: Use selectedSlotNumbers.join(',') ---
+          'slots': selectedSlotNumbers.join(','),
+          // ----------------------------------------------------
         }
       };
 
@@ -194,7 +210,8 @@ class _BookingScreenState extends State<BookingScreen> {
         _showErrorDialog("Error starting payment: $e");
       }
     } else {
-      _showErrorDialog("Please complete all selections");
+      _showErrorDialog(
+          "Please complete all selections (Vehicle, Number Plate, Time, Slot)");
     }
   }
 
@@ -210,13 +227,16 @@ class _BookingScreenState extends State<BookingScreen> {
     try {
       final List<int> bookedSlots = [];
 
-      for (String slotId in selectedSlotIds) {
+      // --- UPDATED: Loop through selected Slot Numbers (int) ---
+      for (int slotNumber in selectedSlotNumbers) {
         final response = await http.post(
-          Uri.parse('https://$apiHost/api/bookings'),
+          Uri.parse('$apiScheme://$apiHost/api/bookings'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'parking_id': widget.parkingId,
-            'slot_id': slotId,
+            // --- CRITICAL CHANGE: Send slot_number, not slot_id ---
+            'slot_number': slotNumber,
+            // ------------------------------------------------------
             'vehicle_type': selectedVehicle!.toLowerCase(),
             'number_plate': _vehicleNumberController.text,
             'entry_time': entryDateTime.toIso8601String(),
@@ -226,22 +246,22 @@ class _BookingScreenState extends State<BookingScreen> {
         );
 
         if (response.statusCode != 200) {
-          _showErrorDialog("Failed to book slot: ${response.body}");
+          // If a slot fails to book, show error and stop immediately
+          _showErrorDialog(
+              "Failed to book slot $slotNumber: ${jsonDecode(response.body)['message'] ?? response.body}");
           return;
         } else {
-          final slot = allSlots.firstWhere((s) => s['_id'] == slotId,
-              orElse: () => null);
-          if (slot != null) {
-            bookedSlots.add(slot['slot_number'] as int);
-          }
+          // Add the successfully booked slot number to the list for the success screen
+          bookedSlots.add(slotNumber);
         }
       }
+      // -------------------------------------------------------------
 
       await Future.delayed(const Duration(milliseconds: 500));
-      Navigator.pop(context); // Dismiss the progress dialog
+      if (mounted) Navigator.pop(context); // Dismiss the progress dialog
 
       if (mounted) {
-        await _fetchParkingAreaDetails();
+        await _fetchParkingAreaDetails(); // Refresh details
 
         Navigator.push(
           context,
@@ -249,7 +269,7 @@ class _BookingScreenState extends State<BookingScreen> {
             builder: (context) => SuccessScreen(
               location: widget.location,
               vehicleType: selectedVehicle!,
-              slots: bookedSlots,
+              slots: bookedSlots, // List of slot numbers
               entryDateTime: entryDateTime,
               phoneNumber: widget.phoneNumber,
             ),
@@ -257,7 +277,7 @@ class _BookingScreenState extends State<BookingScreen> {
         );
       }
     } catch (error) {
-      Navigator.pop(context); // Dismiss the progress dialog
+      if (mounted) Navigator.pop(context); // Dismiss the progress dialog
       _showErrorDialog("Error confirming booking: $error");
     }
   }
@@ -485,7 +505,9 @@ class _BookingScreenState extends State<BookingScreen> {
                                 ? null
                                 : (value) => setState(() {
                                       selectedVehicle = value;
-                                      selectedSlotIds.clear();
+                                      // --- UPDATED: Use selectedSlotNumbers ---
+                                      selectedSlotNumbers.clear();
+                                      // ----------------------------------------
                                       _fetchAllSlots();
                                     }),
                             dropdownColor: AppColors.cardSurface,
@@ -678,7 +700,9 @@ class _BookingScreenState extends State<BookingScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _buildLegendItem(AppColors.infoItemBg, "Available"),
+                            // --- UPDATED LEGEND COLOR ---
                             _buildLegendItem(AppColors.markerColor, "Selected"),
+                            // -----------------------------
                             _buildLegendItem(
                                 AppColors.outlinedButtonColor, "Booked"),
                           ],
@@ -707,11 +731,12 @@ class _BookingScreenState extends State<BookingScreen> {
                                         spacing: 10.0,
                                         runSpacing: 10.0,
                                         children: allSlots.map((slot) {
-                                          final slotId = slot['_id'];
+                                          // --- UPDATED: Use slotNumber (int) for selection ---
                                           final slotNumber =
-                                              slot['slot_number'];
-                                          final isSelected =
-                                              selectedSlotIds.contains(slotId);
+                                              slot['slot_number'] as int;
+                                          final isSelected = selectedSlotNumbers
+                                              .contains(slotNumber);
+                                          // ----------------------------------------------------
                                           final isBooked =
                                               slot['is_booked'] == true;
 
@@ -720,14 +745,14 @@ class _BookingScreenState extends State<BookingScreen> {
                                           final Color textColor;
 
                                           if (isBooked) {
-                                            // Booked: Medium-gray slot, dimmed text
-
-                                            slotColor = AppColors.primaryText;
-                                            textColor = AppColors.darkText;
+                                            // Booked: Light-gray slot, dimmed text
+                                            slotColor =
+                                                AppColors.outlinedButtonColor;
+                                            textColor = AppColors.secondaryText;
                                           } else if (isSelected) {
-                                            // Selected: White slot, dark text
-                                            slotColor = AppColors.hintText;
-                                            textColor = AppColors.darkText;
+                                            // Selected: Accent color slot, white text
+                                            slotColor = AppColors.markerColor;
+                                            textColor = AppColors.primaryText;
                                           } else {
                                             // Available: Dark gray slot, white text (as before)
                                             slotColor = AppColors.infoItemBg;
@@ -741,11 +766,15 @@ class _BookingScreenState extends State<BookingScreen> {
                                                 : () {
                                                     setState(() {
                                                       if (isSelected) {
-                                                        selectedSlotIds
-                                                            .remove(slotId);
+                                                        // --- UPDATED ---
+                                                        selectedSlotNumbers
+                                                            .remove(slotNumber);
+                                                        // -----------------
                                                       } else {
-                                                        selectedSlotIds
-                                                            .add(slotId);
+                                                        // --- UPDATED ---
+                                                        selectedSlotNumbers
+                                                            .add(slotNumber);
+                                                        // -----------------
                                                       }
                                                     });
                                                   },
@@ -761,8 +790,8 @@ class _BookingScreenState extends State<BookingScreen> {
                                                 boxShadow: isSelected
                                                     ? [
                                                         BoxShadow(
-                                                          color: AppColors
-                                                              .shadow, // CHANGED
+                                                          color:
+                                                              AppColors.shadow,
                                                           blurRadius: 8,
                                                           offset: const Offset(
                                                               0, 2),
@@ -773,7 +802,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                               child: Center(
                                                 child: Text(
                                                   "$slotNumber",
-                                                  style: TextStyle(
+                                                  style: GoogleFonts.poppins(
                                                     color: textColor, // CHANGED
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16,
@@ -799,10 +828,9 @@ class _BookingScreenState extends State<BookingScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed:
-                          _startPayment, // Change here to call the payment function
+                      onPressed: _startPayment,
                       child: Text(
-                        "Book Now",
+                        "Book Now (${selectedSlotNumbers.length} Slot${selectedSlotNumbers.length == 1 ? '' : 's'} - ₹${(selectedSlotNumbers.length * pricePerSlot).toStringAsFixed(2)})",
                         style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

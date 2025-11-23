@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'user_login_screen.dart';
 
 // --- THEME COLORS ---
@@ -37,18 +38,25 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _carController = TextEditingController();
-  final TextEditingController _bikeController = TextEditingController();
+
+  // Vehicle plate controllers removed as they are no longer stored in the user document
+
   bool _isLoading = false;
-  String apiHost =
-      'backend-parking-bk8y.onrender.com'; // Default for Android Emulator
+
+  // Production/Default Host
+  String apiHost = 'backend-parking-bk8y.onrender.com';
+  String apiScheme = 'https';
 
   @override
   void initState() {
     super.initState();
-    // Adjust host for web
+    _setApiHost();
+  }
+
+  void _setApiHost() {
     if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
-      apiHost = '127.0.0.1';
+      apiHost = '127.0.0.1:3000'; // Assuming local server runs on port 3000
+      apiScheme = 'http';
     }
   }
 
@@ -57,21 +65,25 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
       setState(() {
         _isLoading = true;
       });
+
+      // Removed car_number_plate and bike_number_plate from the data payload
       final userData = {
         'name': _nameController.text,
-        'phone': _phoneController.text,
-        'car_number_plate': _carController.text,
-        'bike_number_plate': _bikeController.text,
+        'phone': _phoneController.text.trim(),
       };
 
       try {
+        final uri = Uri.parse('$apiScheme://$apiHost/api/users/register');
+
         final response = await http.post(
-          Uri.parse('https://$apiHost/api/users/register'),
+          uri,
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(userData),
         );
 
-        if (response.statusCode == 201) {
+        // Status 201: Successfully registered
+        // Status 200: User already exists (shouldn't happen on register page but backend allows it)
+        if (response.statusCode == 201 || response.statusCode == 200) {
           _showSnackBar('Registration successful! Please log in.',
               isError: false);
           if (mounted) {
@@ -82,11 +94,12 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
           }
         } else {
           final responseBody = jsonDecode(response.body);
-          _showSnackBar('Registration failed: ${responseBody['message']}',
+          _showSnackBar(
+              'Registration failed: ${responseBody['message'] ?? 'Unknown error'}',
               isError: true);
         }
       } catch (e) {
-        _showSnackBar('Error: $e', isError: true);
+        _showSnackBar('Error connecting to server: $e', isError: true);
       } finally {
         if (mounted) {
           setState(() {
@@ -154,14 +167,15 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
                 if (value == null || value.isEmpty) {
                   return 'Please enter a phone number';
                 }
+                // Simple check for phone length
+                if (value.length < 10) {
+                  return 'Phone number must be at least 10 digits';
+                }
                 return null;
-              }),
-              const SizedBox(height: 16),
-              _buildTextField(
-                  _carController, "Car Number Plate", Icons.directions_car),
-              const SizedBox(height: 16),
-              _buildTextField(
-                  _bikeController, "Bike Number Plate", Icons.motorcycle),
+              }, TextInputType.phone, 15),
+
+              // Vehicle number plate fields removed as per new schema
+
               const SizedBox(height: 30),
               _isLoading
                   ? const Center(
@@ -204,16 +218,21 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
 
   Widget _buildTextField(
       TextEditingController controller, String labelText, IconData icon,
-      [String? Function(String?)? validator]) {
+      [String? Function(String?)? validator,
+      TextInputType keyboardType = TextInputType.text,
+      int? maxLength]) {
     return TextFormField(
       controller: controller,
       style: const TextStyle(color: AppColors.primaryText),
+      keyboardType: keyboardType,
+      maxLength: maxLength,
       decoration: InputDecoration(
         labelText: labelText,
         labelStyle: const TextStyle(color: AppColors.hintText),
         prefixIcon: Icon(icon, color: AppColors.hintText),
         filled: true,
         fillColor: AppColors.cardSurface,
+        counterText: "", // Hide character counter for phone/name
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,

@@ -4,8 +4,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io'
+    show Platform; // Imported for more robust local host determination
 
-// --- THEME COLORS ---
+// --- THEME COLORS (Dark Mode) ---
 class AppColors {
   static const Color appBackground = Color(0xFF1C1C1E);
   static const Color cardSurface = Color(0xFF2C2C2E);
@@ -18,7 +20,8 @@ class AppColors {
   static const Color hintText = Color(0xFF8E8E93);
   static const Color darkText = Color(0xFF000000); // For white buttons
 
-  static const Color markerColor = Color(0xFF0A84FF); // Blue accent
+  static const Color markerColor =
+      Color(0xFF0A84FF); // Blue accent (Active status)
   static const Color routeColor = Color(0xFF5AC8FA);
   static const Color outlinedButtonColor = Color(0xFF8E8E93);
   static const Color elevatedButtonBg = Color(0xFFFFFFFF);
@@ -41,14 +44,28 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   List<dynamic> _bookings = [];
   bool _isLoading = true;
   String apiHost = 'backend-parking-bk8y.onrender.com';
+  String apiScheme = 'https';
 
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      apiHost = '192.168.1.2';
-    }
+    _setApiHost();
     _fetchMyBookings();
+  }
+
+  void _setApiHost() {
+    // Check for local development environment
+    if (kIsWeb &&
+        (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1')) {
+      apiHost = '127.0.0.1:3000'; // Assuming local server runs on port 3000
+      apiScheme = 'http';
+    }
+    // If running on a physical device/emulator pointing to a local server,
+    // you would uncomment and set a fixed local IP here, e.g.:
+    // else if (!kIsWeb) {
+    //   apiHost = 'YOUR_LOCAL_IP:3000';
+    //   apiScheme = 'http';
+    // }
   }
 
   void _showErrorSnackBar(String message) {
@@ -70,16 +87,29 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       _isLoading = true;
     });
     try {
-      final response = await http.get(
-        Uri.parse('https://$apiHost/api/users/bookings/${widget.phoneNumber}'),
-      );
+      final uri = Uri.parse(
+          '$apiScheme://$apiHost/api/users/bookings/${widget.phoneNumber}');
+
+      final response = await http.get(uri);
+
       if (response.statusCode == 200) {
         setState(() {
           _bookings = jsonDecode(response.body);
           _isLoading = false;
         });
       } else {
-        _showErrorSnackBar('Failed to load bookings: ${response.statusCode}');
+        // Attempt to decode error message if available
+        String errorMessage = 'Failed to load bookings: ${response.statusCode}';
+        try {
+          final body = jsonDecode(response.body);
+          if (body != null && body['message'] != null) {
+            errorMessage = body['message'];
+          }
+        } catch (e) {
+          // Ignore JSON decoding error, use default message
+        }
+
+        _showErrorSnackBar(errorMessage);
         setState(() {
           _isLoading = false;
         });
@@ -138,25 +168,21 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                   itemBuilder: (context, index) {
                     final booking = _bookings[index];
                     final entryTime = DateTime.parse(booking['entry_time']);
-                    final formattedDate =
-                        DateFormat('MMM dd, yyyy').format(entryTime);
-                    final formattedTime =
-                        DateFormat('hh:mm a').format(entryTime);
 
-                    // --- MODIFIED ---
-                    // Determine status, background color, and text color
-                    final bool isCompleted =
+                    // Status is now inferred on the server, but we use exit_time as the primary check
+                    final bool isCompleted = booking['exit_time'] != null ||
                         (booking['status'] ?? 'active') == 'completed';
-                    final String statusText = booking['status'] ?? 'active';
+                    final String statusText =
+                        isCompleted ? 'Completed' : 'Active';
 
                     final Color statusBgColor = isCompleted
-                        ? AppColors.infoItemBg // Dark grey for completed
-                        : AppColors.primaryText; // White for active
+                        ? AppColors.infoItemBg // Subtle grey for completed
+                        : AppColors.markerColor; // Blue for active
 
                     final Color statusTextColor = isCompleted
-                        ? AppColors.primaryText // White text for completed
-                        : AppColors.darkText; // Black text for active
-                    // --- END MODIFIED ---
+                        ? AppColors
+                            .secondaryText // Light grey text for completed
+                        : AppColors.primaryText; // White text for active
 
                     return Card(
                       color: AppColors.cardSurface,
@@ -173,10 +199,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                           children: [
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start, // Align top
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Wrapped with Flexible to constrain width
+                                // Location Name
                                 Flexible(
                                   child: Text(
                                     booking['location'] ?? 'N/A',
@@ -185,42 +210,63 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.primaryText,
                                     ),
-                                    // Added overflow handling
                                     overflow: TextOverflow.ellipsis,
                                     maxLines: 2,
                                   ),
                                 ),
-                                // Added spacing so chip doesn't touch text
                                 const SizedBox(width: 8),
-                                // --- MODIFIED ---
+                                // Status Chip
                                 Chip(
                                   label: Text(
-                                    statusText, // Use status text variable
+                                    statusText,
                                     style: GoogleFonts.poppins(
-                                      color:
-                                          statusTextColor, // Use status text color
+                                      color: statusTextColor,
                                       fontWeight: FontWeight.w600,
+                                      fontSize: 12,
                                     ),
                                   ),
-                                  backgroundColor:
-                                      statusBgColor, // Use status bg color
+                                  backgroundColor: statusBgColor,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 4),
                                 ),
-                                // --- END MODIFIED ---
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            _buildDetailRow(
-                                Icons.calendar_today, "Date", formattedDate),
-                            _buildDetailRow(
-                                Icons.access_time, "Time", formattedTime),
+                            const SizedBox(height: 12),
+                            // Entry Details
+                            _buildDetailRow(Icons.calendar_today, "Entry Date",
+                                DateFormat('MMM dd, yyyy').format(entryTime)),
+                            _buildDetailRow(Icons.access_time, "Entry Time",
+                                DateFormat('hh:mm a').format(entryTime)),
+
+                            // Completed Details (Only show if completed)
+                            if (isCompleted) ...[
+                              const Divider(
+                                  height: 20, color: AppColors.infoItemBg),
+                              _buildDetailRow(
+                                  Icons.exit_to_app_rounded,
+                                  "Exit Time",
+                                  booking['exit_time'] != null
+                                      ? DateFormat('hh:mm a').format(
+                                          DateTime.parse(booking['exit_time']))
+                                      : 'N/A'),
+                              _buildDetailRow(
+                                  Icons.payments,
+                                  "Amount Paid",
+                                  booking['amount'] != null
+                                      ? "₹${booking['amount'].toStringAsFixed(2)}"
+                                      : 'N/A'),
+                            ],
+
+                            const Divider(
+                                height: 20, color: AppColors.infoItemBg),
+
+                            // Vehicle & Slot Details
                             _buildDetailRow(
                                 booking['vehicle_type'] == 'car'
                                     ? Icons.directions_car
                                     : Icons.motorcycle,
                                 "Vehicle",
-                                "${booking['number_plate'] ?? 'N/A'} (${booking['vehicle_type'] ?? 'N/A'})"),
+                                "${(booking['number_plate'] ?? 'N/A').toUpperCase()} (${booking['vehicle_type'] ?? 'N/A'})"),
                             _buildDetailRow(Icons.confirmation_number, "Slot",
                                 "Slot ${booking['slot_number'] ?? 'N/A'}"),
                           ],
@@ -239,14 +285,18 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
         children: [
           Icon(icon, size: 18, color: AppColors.secondaryText),
           const SizedBox(width: 8),
-          Text(
-            "$label:",
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: AppColors.secondaryText,
+          SizedBox(
+            width: 90, // Fixed width for label for alignment
+            child: Text(
+              "$label:",
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: AppColors.secondaryText,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               value,

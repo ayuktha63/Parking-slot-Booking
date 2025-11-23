@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io' show Platform; // Import for platform check
+
 import 'home_screen.dart';
 import 'user_register_screen.dart'; // Import the register screen
 
@@ -97,16 +99,30 @@ class UserLoginScreen extends StatefulWidget {
 class _UserLoginScreenState extends State<UserLoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
+  // Production/Default Host
   String apiHost = 'backend-parking-bk8y.onrender.com';
-  // Default for Android Emulator
+  String apiScheme = 'https';
 
   @override
   void initState() {
     super.initState();
-    // Adjust host for web
-    if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
-      apiHost = '127.0.0.1';
+    _setApiHost();
+  }
+
+  // Helper to determine the correct host based on environment
+  void _setApiHost() {
+    // Check if running in a development environment (emulator/local web)
+    // Note: Checking for 'localhost' or '127.0.0.1' in web is usually enough.
+    // For Android emulator pointing to local host, '10.0.2.2' is the correct IP.
+    if (Platform.isAndroid || Platform.isIOS) {
+      // If you are using a local server on your machine for testing the app on a physical device or simulator
+      // apiHost = 'YOUR_LOCAL_IP_ADDRESS:3000'; // e.g., '192.168.1.10:3000'
+      // apiScheme = 'http';
+    } else if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
+      apiHost = '127.0.0.1:3000'; // Assuming local server runs on port 3000
+      apiScheme = 'http';
     }
+    // If not local, it defaults to the production 'backend-parking-bk8y.onrender.com' over 'https'
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
@@ -124,41 +140,72 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
     }
   }
 
+  // Updated to use the combined /api/users/register endpoint for login/registration check
   Future<bool> _registerOrLoginUser(String phoneNumber) async {
     try {
-      final response = await http.post(
-        Uri.parse('https://$apiHost/api/users/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'phone': phoneNumber,
-        }),
-      );
+      final uri = Uri.parse('$apiScheme://$apiHost/api/users/register');
 
+      final response = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'phone': phoneNumber,
+            }),
+          )
+          .timeout(const Duration(seconds: 15)); // Add timeout for reliability
+
+      // Status 200 (OK) = User already exists (Login)
+      // Status 201 (Created) = New user registered
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Successfully logged in or registered
+        final body = jsonDecode(response.body);
+        final message = body['message'];
+
+        // Show a helpful message to the user
+        _showSnackBar(message.contains('exists')
+            ? 'Login successful!'
+            : 'Registration successful!');
         return true;
       } else {
         final body = jsonDecode(response.body);
-        _showSnackBar('Login failed: ${body['message'] ?? 'Unknown error'}',
+        _showSnackBar(
+            'Authentication failed: ${body['message'] ?? 'Unknown error'}',
             isError: true);
         return false;
       }
+    } on TimeoutException {
+      _showSnackBar(
+          'Connection timed out. Check your network or server status.',
+          isError: true);
+      return false;
     } catch (e) {
-      _showSnackBar('Error: $e', isError: true);
+      _showSnackBar('Error connecting to the server: ${e.toString()}',
+          isError: true);
       return false;
     }
   }
 
   void _verifyPhone() async {
-    setState(() => _isLoading = true);
     String phoneNumber = _phoneController.text.trim();
+    if (phoneNumber.isEmpty) {
+      _showSnackBar('Please enter your phone number.', isError: true);
+      return;
+    }
+
+    // Simple validation (can be more robust)
+    if (phoneNumber.length < 10) {
+      _showSnackBar('Phone number seems too short.', isError: true);
+      return;
+    }
+
+    setState(() => _isLoading = true);
 
     bool success = await _registerOrLoginUser(phoneNumber);
 
     if (mounted) {
       setState(() => _isLoading = false);
       if (success) {
-        // Only navigate if login/register was successful
+        // Navigate to HomeScreen with the phone number
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -166,7 +213,6 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
           ),
         );
       }
-      // If not successful, the snackbar was already shown by _registerOrLoginUser
     }
   }
 
@@ -269,12 +315,14 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                       TextField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
+                        maxLength: 15, // Set max length for phone number
                         style: GoogleFonts.poppins(
                           fontSize: 16,
                           color: AppColors.primaryText,
                         ),
                         decoration: InputDecoration(
                           hintText: "+91 123 456 7890",
+                          counterText: "", // Hide the counter
                           hintStyle:
                               GoogleFonts.poppins(color: AppColors.hintText),
                           prefixIcon: Icon(Icons.phone_rounded,
@@ -321,6 +369,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                 const SizedBox(height: 20),
                 TextButton(
                   onPressed: () {
+                    // Navigate to the User Register Screen
                     Navigator.push(
                       context,
                       MaterialPageRoute(

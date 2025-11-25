@@ -129,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           parkingPlaces = data
               .map((area) => {
-                    "_id": area['_id'],
+                    "id": area['id'],
                     "name": area['name'],
                     "cars": area['available_car_slots'] ?? 0,
                     "bikes": area['available_bike_slots'] ?? 0,
@@ -608,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (context) => BookingScreen(
           location: place["name"],
-          parkingId: place["_id"],
+          parkingId: place["id"].toString(),
           phoneNumber: widget.phoneNumber,
         ),
       ),

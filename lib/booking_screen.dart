@@ -233,7 +233,7 @@ class _BookingScreenState extends State<BookingScreen> {
           Uri.parse('$apiScheme://$apiHost/api/bookings'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
-            'parking_id': widget.parkingId,
+            'parking_id': int.parse(widget.parkingId),
             // --- CRITICAL CHANGE: Send slot_number, not slot_id ---
             'slot_number': slotNumber,
             // ------------------------------------------------------
@@ -732,8 +732,9 @@ class _BookingScreenState extends State<BookingScreen> {
                                         runSpacing: 10.0,
                                         children: allSlots.map((slot) {
                                           // --- UPDATED: Use slotNumber (int) for selection ---
-                                          final slotNumber =
-                                              slot['slot_number'] as int;
+                                          final slotNumber = int.parse(
+                                              slot['slot_number'].toString());
+
                                           final isSelected = selectedSlotNumbers
                                               .contains(slotNumber);
                                           // ----------------------------------------------------

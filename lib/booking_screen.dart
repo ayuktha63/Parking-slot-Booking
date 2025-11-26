@@ -152,8 +152,11 @@ class _BookingScreenState extends State<BookingScreen> {
         }).toList();
 
 // Remove if user selected & now held/booked
-        if (updatedStatus != "available") {
-          selectedSlotNumbers.remove(updatedSlot);
+        // Remove selection if slot not available anymore
+        if (selectedSlotNumbers.contains(updatedSlot)) {
+          if (updatedStatus != "selected") {
+            selectedSlotNumbers.remove(updatedSlot);
+          }
         }
       });
     });

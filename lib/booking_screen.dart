@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
+import 'package:socket_io_client/socket_io_client.dart' as IO; // ✅ NEW
+
 import 'package:flutter/foundation.dart';
 import 'success_screen.dart';
 
@@ -50,6 +52,7 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
+  late IO.Socket socket; // ✅ NEW
   String? selectedVehicle;
   DateTime? startDate;
   TimeOfDay? startTime;
@@ -74,6 +77,28 @@ class _BookingScreenState extends State<BookingScreen> {
   late Razorpay _razorpay;
   final String razorpayKey = "rzp_live_R6QQALUuJwgDaD";
   final double pricePerSlot = 1.0;
+  Future<bool> _holdSlot(int slotNumber) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$apiScheme://$apiHost/api/holds'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "parking_id": int.parse(widget.parkingId),
+          "slot_number": slotNumber,
+          "vehicle_type": selectedVehicle!.toLowerCase(),
+          "phone": widget.phoneNumber,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return true; // ✅ hold created
+      }
+
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
@@ -85,15 +110,63 @@ class _BookingScreenState extends State<BookingScreen> {
       apiScheme = 'http';
     }
     _fetchParkingAreaDetails();
-
+    _initSocket(); // ✅ NEW
     _razorpay = Razorpay();
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
   }
 
+  void _initSocket() {
+    socket = IO.io(
+      '$apiScheme://$apiHost',
+      IO.OptionBuilder()
+          .setTransports(['websocket']) // ✅ No polling
+          .enableAutoConnect()
+          .build(),
+    );
+
+    socket.onConnect((_) {
+      print("✅ Connected to WebSocket");
+
+      if (selectedVehicle != null) {
+        socket.emit("join_parking", {
+          "parking_id": widget.parkingId,
+          "vehicle_type": selectedVehicle!.toLowerCase(),
+        });
+      }
+    });
+
+    socket.on("slot_update", (data) {
+      print("📡 Slot update received → $data");
+
+      final updatedSlot = data['slot_number'];
+      final updatedStatus = data['status'];
+
+      setState(() {
+        allSlots = allSlots.map((slot) {
+          if (slot['slot_number'] == updatedSlot) {
+            return {...slot, "status": updatedStatus};
+          }
+          return slot;
+        }).toList();
+
+// Remove if user selected & now held/booked
+        // Remove selection if slot not available anymore
+        if (selectedSlotNumbers.contains(updatedSlot)) {
+          if (updatedStatus != "selected") {
+            selectedSlotNumbers.remove(updatedSlot);
+          }
+        }
+      });
+    });
+
+    socket.onDisconnect((_) => print("❌ Disconnected from socket"));
+  }
+
   @override
   void dispose() {
+    socket.dispose(); // ✅ prevent memory leaks
     _razorpay.clear();
     _vehicleNumberController.dispose();
     super.dispose();
@@ -503,13 +576,22 @@ class _BookingScreenState extends State<BookingScreen> {
                             }).toList(),
                             onChanged: vehicleTypes.isEmpty
                                 ? null
-                                : (value) => setState(() {
+                                : (value) {
+                                    setState(() {
                                       selectedVehicle = value;
-                                      // --- UPDATED: Use selectedSlotNumbers ---
                                       selectedSlotNumbers.clear();
-                                      // ----------------------------------------
-                                      _fetchAllSlots();
-                                    }),
+                                    });
+
+                                    // ✅ re-fetch slots
+                                    _fetchAllSlots();
+
+                                    // ✅ join correct WebSocket room
+                                    socket.emit("join_parking", {
+                                      "parking_id": widget.parkingId,
+                                      "vehicle_type":
+                                          selectedVehicle!.toLowerCase(),
+                                    });
+                                  },
                             dropdownColor: AppColors.cardSurface,
                             icon: const Icon(Icons.arrow_drop_down,
                                 color: AppColors.hintText),
@@ -700,9 +782,8 @@ class _BookingScreenState extends State<BookingScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _buildLegendItem(AppColors.infoItemBg, "Available"),
-                            // --- UPDATED LEGEND COLOR ---
                             _buildLegendItem(AppColors.markerColor, "Selected"),
-                            // -----------------------------
+                            _buildLegendItem(Colors.orangeAccent, "Held"),
                             _buildLegendItem(
                                 AppColors.outlinedButtonColor, "Booked"),
                           ],
@@ -737,47 +818,61 @@ class _BookingScreenState extends State<BookingScreen> {
 
                                           final isSelected = selectedSlotNumbers
                                               .contains(slotNumber);
-                                          // ----------------------------------------------------
-                                          final isBooked =
-                                              slot['is_booked'] == true;
+                                          final String status =
+                                              slot['status'] ?? "available";
+                                          final bool isBooked =
+                                              status == "booked";
+                                          final bool isHeld = status == "held";
 
                                           // --- Define colors based on state ---
                                           final Color slotColor;
                                           final Color textColor;
 
                                           if (isBooked) {
-                                            // Booked: Light-gray slot, dimmed text
                                             slotColor =
-                                                AppColors.outlinedButtonColor;
+                                                Colors.grey.shade600; // booked
                                             textColor = AppColors.secondaryText;
+                                          } else if (isHeld) {
+                                            slotColor =
+                                                Colors.orangeAccent; // held
+                                            textColor = Colors.white;
                                           } else if (isSelected) {
-                                            // Selected: Accent color slot, white text
-                                            slotColor = AppColors.markerColor;
-                                            textColor = AppColors.primaryText;
+                                            slotColor = AppColors
+                                                .markerColor; // selected
+                                            textColor = Colors.white;
                                           } else {
-                                            // Available: Dark gray slot, white text (as before)
-                                            slotColor = AppColors.infoItemBg;
+                                            slotColor = AppColors
+                                                .infoItemBg; // available
                                             textColor = AppColors.primaryText;
                                           }
+
                                           // --- End of color definitions ---
 
                                           return GestureDetector(
-                                            onTap: isBooked
+                                            onTap: (isBooked || isHeld)
                                                 ? null
-                                                : () {
-                                                    setState(() {
-                                                      if (isSelected) {
-                                                        // --- UPDATED ---
-                                                        selectedSlotNumbers
-                                                            .remove(slotNumber);
-                                                        // -----------------
-                                                      } else {
-                                                        // --- UPDATED ---
-                                                        selectedSlotNumbers
-                                                            .add(slotNumber);
-                                                        // -----------------
-                                                      }
-                                                    });
+                                                : () async {
+                                                    if (isSelected) {
+                                                      // optional: release hold when deselect
+                                                      selectedSlotNumbers
+                                                          .remove(slotNumber);
+                                                      setState(() {});
+                                                      return;
+                                                    }
+
+                                                    final success =
+                                                        await _holdSlot(
+                                                            slotNumber);
+
+                                                    if (!success) {
+                                                      _showErrorDialog(
+                                                          "Slot already taken or unavailable.");
+                                                      return;
+                                                    }
+
+                                                    selectedSlotNumbers
+                                                        .add(slotNumber);
+                                                    setState(() {});
                                                   },
                                             child: AnimatedContainer(
                                               duration: const Duration(

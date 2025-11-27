@@ -28,6 +28,7 @@ class AppColors {
 
   static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
   static const Color errorRed = Color(0xFFD32F2F); // A dark red for errors
+  static const Color cancelledBg = Color(0xFF6E6E73); // grey-ish for cancelled
 }
 // --- END THEME COLORS ---
 
@@ -122,6 +123,62 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     }
   }
 
+  // ======================================================
+  // NEW: Cancel Booking API
+  // ======================================================
+  Future<void> _cancelBooking(dynamic booking) async {
+    final confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Cancel Booking?", style: GoogleFonts.poppins()),
+        content: Text(
+          "Do you really want to cancel this booking?",
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("No"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Yes"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final uri = Uri.parse('$apiScheme://$apiHost/api/bookings/cancel');
+
+      final response = await http.post(
+        uri,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "booking_id": booking["id"],
+          "parking_id": booking["parking_id"],
+          "vehicle_type": booking["vehicle_type"]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        _showErrorSnackBar(
+            "Cancelled • Refund: ${data["refund_percent"]}% (₹${data["refund_amount"]})");
+
+        _fetchMyBookings(); // Refresh list
+      } else {
+        _showErrorSnackBar("Failed to cancel booking");
+      }
+    } catch (e) {
+      _showErrorSnackBar("Error: $e");
+    }
+  }
+  // ======================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,19 +227,26 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                     final entryTime = DateTime.parse(booking['entry_time']);
 
                     // Status is now inferred on the server, but we use exit_time as the primary check
-                    final bool isCompleted = booking['exit_time'] != null ||
-                        (booking['status'] ?? 'active') == 'completed';
-                    final String statusText =
-                        isCompleted ? 'Completed' : 'Active';
+                    final bool isCancelled = booking['cancelled'] == true;
 
-                    final Color statusBgColor = isCompleted
-                        ? AppColors.infoItemBg // Subtle grey for completed
-                        : AppColors.markerColor; // Blue for active
+                    final bool isCompleted = !isCancelled &&
+                        (booking['exit_time'] != null ||
+                            (booking['status'] ?? 'active') == 'completed');
 
-                    final Color statusTextColor = isCompleted
-                        ? AppColors
-                            .secondaryText // Light grey text for completed
-                        : AppColors.primaryText; // White text for active
+                    String statusText = "Active";
+                    if (isCancelled)
+                      statusText = "Cancelled";
+                    else if (isCompleted) statusText = "Completed";
+
+                    final Color statusBgColor = isCancelled
+                        ? AppColors.cancelledBg
+                        : (isCompleted
+                            ? AppColors.infoItemBg
+                            : AppColors.markerColor);
+
+                    final Color statusTextColor = isCompleted || isCancelled
+                        ? AppColors.secondaryText
+                        : AppColors.primaryText;
 
                     return Card(
                       color: AppColors.cardSurface,
@@ -238,8 +302,21 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                             _buildDetailRow(Icons.access_time, "Entry Time",
                                 DateFormat('hh:mm a').format(entryTime)),
 
-                            // Completed Details (Only show if completed)
-                            if (isCompleted) ...[
+                            // Completed / Cancelled Details
+                            if (isCancelled) ...[
+                              const Divider(
+                                  height: 20, color: AppColors.infoItemBg),
+                              _buildDetailRow(
+                                  Icons.cancel,
+                                  "Cancelled At",
+                                  booking['cancelled_at'] != null
+                                      ? DateFormat('hh:mm a').format(
+                                          DateTime.parse(
+                                              booking['cancelled_at']))
+                                      : 'N/A'),
+                              _buildDetailRow(Icons.payments, "Refund",
+                                  "${booking['refund_percent'] ?? 0}%"),
+                            ] else if (isCompleted) ...[
                               const Divider(
                                   height: 20, color: AppColors.infoItemBg),
                               _buildDetailRow(
@@ -269,6 +346,24 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                                 "${(booking['number_plate'] ?? 'N/A').toUpperCase()} (${booking['vehicle_type'] ?? 'N/A'})"),
                             _buildDetailRow(Icons.confirmation_number, "Slot",
                                 "Slot ${booking['slot_number'] ?? 'N/A'}"),
+
+                            // ======= FIXED: show cancel button only for truly active bookings =======
+                            if (!isCompleted && !isCancelled)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12.0),
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.redAccent,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  onPressed: () => _cancelBooking(booking),
+                                  child: Text("Cancel Booking"),
+                                ),
+                              ),
+                            // ==================================================================================
                           ],
                         ),
                       ),

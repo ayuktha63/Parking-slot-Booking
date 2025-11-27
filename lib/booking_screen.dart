@@ -338,6 +338,7 @@ class _BookingScreenState extends State<BookingScreen> {
             'entry_time': entryDateTime.toIso8601String(),
             'phone': widget.phoneNumber,
             'payment_id': paymentId,
+            'amount': (pricePerSlot * selectedSlotNumbers.length).toInt(),
           }),
         );
 

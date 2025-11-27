@@ -228,12 +228,31 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _fetchAllSlots() async {
-    if (selectedVehicle == null) return;
+    if (selectedVehicle == null || startDate == null || startTime == null) {
+      return;
+    }
+
     setState(() => isLoading = true);
+
+    // ⭐ Correctly build the selected entry datetime
+    final entryDateTime = DateTime(
+      startDate!.year,
+      startDate!.month,
+      startDate!.day,
+      startTime!.hour,
+      startTime!.minute,
+    );
+
     try {
       final url =
-          '$apiScheme://$apiHost/api/parking_areas/${widget.parkingId}/slots?vehicle_type=${selectedVehicle!.toLowerCase()}';
+          '$apiScheme://$apiHost/api/parking_areas/${widget.parkingId}/slots'
+          '?vehicle_type=${selectedVehicle!.toLowerCase()}'
+          '&entry_time=${entryDateTime.toIso8601String()}';
+
+      print("FETCH URL = $url");
+
       final response = await http.get(Uri.parse(url));
+
       if (response.statusCode == 200) {
         setState(() {
           allSlots = jsonDecode(response.body);
@@ -324,8 +343,16 @@ class _BookingScreenState extends State<BookingScreen> {
 
         if (response.statusCode != 200) {
           // If a slot fails to book, show error and stop immediately
-          _showErrorDialog(
-              "Failed to book slot $slotNumber: ${jsonDecode(response.body)['message'] ?? response.body}");
+          final body = jsonDecode(response.body);
+
+          if (body["code"] == "TIME_OVERLAP") {
+            _showErrorDialog(
+                "This slot already has a booking close to your selected time.\n\nPlease pick a different time.");
+          } else {
+            _showErrorDialog(
+                "Failed to book slot $slotNumber: ${body['message'] ?? response.body}");
+          }
+
           return;
         } else {
           // Add the successfully booked slot number to the list for the success screen
@@ -382,6 +409,7 @@ class _BookingScreenState extends State<BookingScreen> {
     );
     if (picked != null) {
       setState(() => startDate = picked);
+      _fetchAllSlots(); // ⭐ NEW
     }
   }
 
@@ -406,6 +434,7 @@ class _BookingScreenState extends State<BookingScreen> {
     );
     if (picked != null) {
       setState(() => startTime = picked);
+      _fetchAllSlots(); // ⭐ REQUIRED — missing in your file
     }
   }
 

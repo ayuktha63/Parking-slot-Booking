@@ -153,8 +153,12 @@ class _BookingScreenState extends State<BookingScreen> {
 
 // Remove if user selected & now held/booked
         // Remove selection if slot not available anymore
+        // Remove selection ONLY if another user changed the slot
         if (selectedSlotNumbers.contains(updatedSlot)) {
-          if (updatedStatus != "selected") {
+          final updateBySameUser = data["phone"] == widget.phoneNumber;
+
+          if (!updateBySameUser &&
+              (updatedStatus == "booked" || updatedStatus == "held")) {
             selectedSlotNumbers.remove(updatedSlot);
           }
         }
@@ -174,7 +178,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) {
     _showBookingProgressDialog();
-    _confirmBooking(response.paymentId);
+    _confirmBooking(response.paymentId ?? "");
   }
 
   void _handlePaymentError(PaymentFailureResponse response) {
@@ -300,16 +304,16 @@ class _BookingScreenState extends State<BookingScreen> {
     try {
       final List<int> bookedSlots = [];
 
-      // --- UPDATED: Loop through selected Slot Numbers (int) ---
-      for (int slotNumber in selectedSlotNumbers) {
+// FIX: clone before iterating
+      final List<int> slotsToBook = List.from(selectedSlotNumbers);
+
+      for (int slotNumber in slotsToBook) {
         final response = await http.post(
           Uri.parse('$apiScheme://$apiHost/api/bookings'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'parking_id': int.parse(widget.parkingId),
-            // --- CRITICAL CHANGE: Send slot_number, not slot_id ---
             'slot_number': slotNumber,
-            // ------------------------------------------------------
             'vehicle_type': selectedVehicle!.toLowerCase(),
             'number_plate': _vehicleNumberController.text,
             'entry_time': entryDateTime.toIso8601String(),

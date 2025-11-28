@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'booking_screen.dart'; // Make sure this file exists
 import 'profile_screen.dart'; // Make sure this file exists
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:math';
 
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -46,6 +47,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  double _selectedRadiusKm = 5.0;
   List<Map<String, dynamic>> parkingPlaces = [];
   List<Map<String, dynamic>> filteredPlaces = [];
   bool isLoading = true;
@@ -61,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- ADDED ---
   // State for the bottom navigation bar
   int _bottomNavIndex = 0;
+  final List<double> radiusSteps = [2, 5, 8, 10];
 
   @override
   void initState() {
@@ -69,6 +72,13 @@ class _HomeScreenState extends State<HomeScreen> {
       apiHost = '127.0.0.1';
     }
     _initializeScreen();
+  }
+
+  String _getRadiusLabel(double km) {
+    if (km == 2) return "< 2 km";
+    if (km == 5) return "2 – 5 km";
+    if (km == 8) return "5 – 8 km";
+    return "8+ km";
   }
 
   Future<void> _initializeScreen() async {
@@ -81,6 +91,47 @@ class _HomeScreenState extends State<HomeScreen> {
       _onPageChanged(0);
     }
   }
+
+  // ✅ ADD HERE — helper for distance
+  double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371; // Earth radius
+    final dLat = (lat2 - lat1) * (3.14159 / 180);
+    final dLon = (lon2 - lon1) * (3.14159 / 180);
+
+    final a = (sin(dLat / 2) * sin(dLat / 2)) +
+        cos(lat1 * 3.14159 / 180) *
+            cos(lat2 * 3.14159 / 180) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return R * c;
+  }
+
+// 🔚 END ADD
+// ✅ ADD HERE — filter places using radius
+  void _applyRadiusFilter() {
+    if (_currentLocation == null) return;
+
+    setState(() {
+      filteredPlaces = parkingPlaces.where((place) {
+        final dist = _distanceInKm(
+          _currentLocation!.latitude,
+          _currentLocation!.longitude,
+          place["lat"],
+          place["lng"],
+        );
+        return dist <= _selectedRadiusKm;
+      }).toList();
+    });
+
+    if (filteredPlaces.isNotEmpty) {
+      _pageController.jumpToPage(0);
+      _onPageChanged(0);
+    }
+  }
+// 🔚 END ADD
 
   Future<void> _getCurrentLocation() async {
     bool serviceEnabled;
@@ -138,6 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   })
               .toList();
           filteredPlaces = List.from(parkingPlaces);
+          _applyRadiusFilter();
         });
       } else {
         _showErrorSnackBar(
@@ -365,11 +417,66 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // --- SEARCH BAR ---
+          // ✅ ADD HERE — radius slider UI
+// --- SEARCH BAR ---
           Positioned(
             top: 10,
             left: 15,
             right: 15,
             child: _buildSearchSection(),
+          ),
+
+// --- RADIUS SLIDER ---
+          Positioned(
+            top: 120,
+            left: 15,
+            right: 15,
+            child: Column(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardSurface,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadow,
+                        blurRadius: 8,
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        "Radius: ${_getRadiusLabel(_selectedRadiusKm)}",
+                        style: const TextStyle(
+                          color: AppColors.primaryText,
+                          fontSize: 14,
+                        ),
+                      ),
+// radius options: <2 km, 2–5 km, 5–8 km, 8+ km
+
+                      Slider(
+                        min: 0,
+                        max: (radiusSteps.length - 1).toDouble(),
+                        divisions: radiusSteps.length - 1,
+                        value:
+                            radiusSteps.indexOf(_selectedRadiusKm).toDouble(),
+                        label: _getRadiusLabel(_selectedRadiusKm),
+                        activeColor: Colors.white,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedRadiusKm = radiusSteps[value.round()];
+                          });
+                          _applyRadiusFilter();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
 
           // --- DISTANCE DISPLAY ---

@@ -58,6 +58,8 @@ class _HomeScreenState extends State<HomeScreen> {
   LatLng? _currentLocation;
   List<LatLng> _routePoints = [];
   double _routeDistance = 0.0; // To store route distance in km
+  double _routeEta = 0.0; // ETA in minutes  ✅ NEW
+
   int _currentPageIndex = 0;
 
   // --- ADDED ---
@@ -263,8 +265,13 @@ class _HomeScreenState extends State<HomeScreen> {
         if (data['routes'] != null && data['routes'].isNotEmpty) {
           final routeData = data['routes'][0];
           final double distanceInKm = (routeData['distance'] ?? 0.0) / 1000.0;
+
+// ⭐ NEW: extract ETA duration (seconds → minutes)
+          final double durationInMin = ((routeData['duration'] ?? 0.0) / 60.0);
+
           final List<dynamic> coordinates =
               routeData['geometry']['coordinates'];
+
           final List<LatLng> route = coordinates
               .map((c) => LatLng((c as List<dynamic>)[1].toDouble(),
                   (c as List<dynamic>)[0].toDouble()))
@@ -273,6 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _routePoints = route;
             _routeDistance = distanceInKm;
+            _routeEta = durationInMin; // ⭐ NEW
           });
 
           if (route.isNotEmpty && mounted) {
@@ -543,7 +551,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPageChanged: _onPageChanged,
                           itemBuilder: (context, index) {
                             final place = filteredPlaces[index];
-                            return _buildParkingCard(context, place);
+                            return _buildParkingCard(context, place, _routeEta);
                           },
                         ),
             ),
@@ -614,7 +622,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildParkingCard(BuildContext context, Map<String, dynamic> place) {
+  Widget _buildParkingCard(
+      BuildContext context, Map<String, dynamic> place, double eta) {
     final carSlotsText = place["cars"] == 0 ? "Full" : place["cars"].toString();
     final bikeSlotsText =
         place["bikes"] == 0 ? "Full" : place["bikes"].toString();
@@ -646,7 +655,25 @@ class _HomeScreenState extends State<HomeScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+
+            const SizedBox(height: 6),
+
+// ⭐ NEW — ETA row
+            Row(
+              children: [
+                Icon(Icons.access_time,
+                    size: 18, color: AppColors.secondaryText),
+                SizedBox(width: 6),
+                Text(
+                  "${eta.toStringAsFixed(0)} min away",
+                  style:
+                      TextStyle(color: AppColors.secondaryText, fontSize: 13),
+                ),
+              ],
+            ),
+
             const SizedBox(height: 10),
+
             Row(
               children: [
                 _buildInfoItem(

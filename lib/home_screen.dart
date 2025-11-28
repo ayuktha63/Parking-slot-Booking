@@ -1,42 +1,29 @@
+// home_screen.dart
+import 'dart:convert';
+import 'dart:ui';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
-import 'package:parking_booking/my_bookings_screen.dart';
-import 'dart:convert';
-import 'booking_screen.dart'; // Make sure this file exists
-import 'profile_screen.dart'; // Make sure this file exists
-import 'package:url_launcher/url_launcher.dart';
-import 'dart:math';
-
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'booking_screen.dart';
+import 'my_bookings_screen.dart';
+import 'profile_screen.dart';
 import 'package:geolocator/geolocator.dart';
 
-// 💡 Using the suggested package for better web performance
-// import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
-
-// --- THEME COLORS ---
 class AppColors {
-  static const Color appBackground = Color(0xFF1C1C1E);
-  static const Color cardSurface = Color(0xFF2C2C2E);
-  static const Color appBarColor = Color(0xFF1C1C1E);
-  static const Color searchBarColor = Color(0xFF2C2C2E);
-  static const Color infoItemBg = Color(0xFF3A3A3C);
-
-  static const Color primaryText = Color(0xFFFFFFFF);
-  static const Color secondaryText = Color(0xFFB0B0B5);
-  static const Color hintText = Color(0xFF8E8E93);
-  static const Color darkText = Color(0xFF000000); // For white buttons
-
-  static const Color markerColor = Color(0xFF000000); // Black accent
-  static const Color routeColor = Color.fromARGB(255, 82, 82, 83);
-  static const Color outlinedButtonColor = Color(0xFF8E8E93);
-  static const Color elevatedButtonBg = Color(0xFFFFFFFF);
-
-  static const Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
-  static const Color errorRed = Color(0xFFD32F2F); // A dark red for errors
+  static const Color background = Color(0xFFF7F7F9);
+  static const Color cardBg = Color(0xFFFFFFFF);
+  static const Color subtleText = Color(0xFF9AA0A6);
+  static const Color titleText = Color(0xFF222222);
+  static const Color accent = Color(0xFF7B61FF); // purple
+  static const Color gold = Color(0xFFFCC417);
+  static const Color glassBg = Color.fromRGBO(255, 255, 255, 0.15);
+  static const Color shadow = Color.fromRGBO(33, 33, 33, 0.08);
+  static const Color hint = Color(0xFFB0B0B5);
+  static const Color white = Colors.white;
+  static const Color error = Color(0xFFD32F2F);
 }
-// --- END THEME COLORS ---
 
 class HomeScreen extends StatefulWidget {
   final String phoneNumber;
@@ -47,25 +34,20 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  double _selectedRadiusKm = 5.0;
-  List<Map<String, dynamic>> parkingPlaces = [];
-  List<Map<String, dynamic>> filteredPlaces = [];
-  bool isLoading = true;
   String apiHost = 'backend-parking-bk8y.onrender.com';
 
-  final MapController _mapController = MapController();
-  final PageController _pageController = PageController(viewportFraction: 0.85);
+  bool isLoading = true;
+  String userName = "Prasad";
+  String userLocationLabel = "Trivandrum, Kerala";
   LatLng? _currentLocation;
-  List<LatLng> _routePoints = [];
-  double _routeDistance = 0.0; // To store route distance in km
-  double _routeEta = 0.0; // ETA in minutes  ✅ NEW
 
-  int _currentPageIndex = 0;
+  List<Map<String, dynamic>> parkingPlaces = [];
+  List<Map<String, dynamic>> nearbyPlaces = [];
+  List<Map<String, dynamic>> popularPlaces = [];
 
-  // --- ADDED ---
-  // State for the bottom navigation bar
-  int _bottomNavIndex = 0;
-  final List<double> radiusSteps = [2, 5, 8, 10];
+  String searchQuery = "";
+  bool nearbyExpanded = false;
+  bool popularExpanded = false;
 
   @override
   void initState() {
@@ -73,736 +55,635 @@ class _HomeScreenState extends State<HomeScreen> {
     if (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1') {
       apiHost = '127.0.0.1';
     }
-    _initializeScreen();
+    _initialize();
   }
 
-  String _getRadiusLabel(double km) {
-    if (km == 2) return "< 2 km";
-    if (km == 5) return "2 – 5 km";
-    if (km == 8) return "5 – 8 km";
-    return "8+ km";
-  }
-
-  Future<void> _initializeScreen() async {
+  Future<void> _initialize() async {
     setState(() => isLoading = true);
-    await _getCurrentLocation();
+    await _getDeviceLocation();
+    await _fetchUserProfile();
     await _fetchParkingAreas();
     setState(() => isLoading = false);
-
-    if (filteredPlaces.isNotEmpty) {
-      _onPageChanged(0);
-    }
   }
 
-  // ✅ ADD HERE — helper for distance
-  double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
-    const R = 6371; // Earth radius
-    final dLat = (lat2 - lat1) * (3.14159 / 180);
-    final dLon = (lon2 - lon1) * (3.14159 / 180);
-
-    final a = (sin(dLat / 2) * sin(dLat / 2)) +
-        cos(lat1 * 3.14159 / 180) *
-            cos(lat2 * 3.14159 / 180) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
-
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-
-    return R * c;
-  }
-
-// 🔚 END ADD
-// ✅ ADD HERE — filter places using radius
-  void _applyRadiusFilter() {
-    if (_currentLocation == null) return;
-
-    setState(() {
-      filteredPlaces = parkingPlaces.where((place) {
-        final dist = _distanceInKm(
-          _currentLocation!.latitude,
-          _currentLocation!.longitude,
-          place["lat"],
-          place["lng"],
-        );
-        return dist <= _selectedRadiusKm;
-      }).toList();
-    });
-
-    if (filteredPlaces.isNotEmpty) {
-      _pageController.jumpToPage(0);
-      _onPageChanged(0);
-    }
-  }
-// 🔚 END ADD
-
-  Future<void> _getCurrentLocation() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _showErrorSnackBar("Location services are disabled.");
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _showErrorSnackBar("Location permissions are denied.");
-        return;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      _showErrorSnackBar("Location permissions are permanently denied.");
-      return;
-    }
-
+  Future<void> _getDeviceLocation() async {
     try {
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
-      setState(() {
-        _currentLocation = LatLng(position.latitude, position.longitude);
-      });
-      if (mounted) {
-        _mapController.move(_currentLocation!, 15.0);
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
       }
-    } catch (e) {
-      _showErrorSnackBar("Failed to get current location: $e");
-    }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) return;
+
+      Position pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.best);
+
+      setState(() {
+        _currentLocation = LatLng(pos.latitude, pos.longitude);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _fetchUserProfile() async {
+    try {
+      final response = await http
+          .get(Uri.parse('https://$apiHost/api/users/${widget.phoneNumber}'));
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        setState(() {
+          userName = json['name'] ?? userName;
+          userLocationLabel = json['address'] ??
+              "${json['city'] ?? ""}, ${json['state'] ?? ""}".trim();
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchParkingAreas() async {
     try {
       final response =
           await http.get(Uri.parse('https://$apiHost/api/parking_areas'));
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        setState(() {
-          parkingPlaces = data
-              .map((area) => {
-                    "id": area['id'],
-                    "name": area['name'],
-                    "cars": area['available_car_slots'] ?? 0,
-                    "bikes": area['available_bike_slots'] ?? 0,
-                    "lat": area['location']['lat'].toDouble(),
-                    "lng": area['location']['lng'].toDouble(),
-                  })
-              .toList();
-          filteredPlaces = List.from(parkingPlaces);
-          _applyRadiusFilter();
-        });
-      } else {
-        _showErrorSnackBar(
-            "Failed to load parking areas: ${response.statusCode}");
-      }
-    } catch (error) {
-      _showErrorSnackBar("Error loading parking areas: $error");
-    }
-  }
-
-  void _filterParkingPlaces(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        filteredPlaces = List.from(parkingPlaces);
-      } else {
-        filteredPlaces = parkingPlaces
-            .where((place) =>
-                place["name"].toLowerCase().contains(query.toLowerCase()))
-            .toList();
-      }
-      _routePoints.clear();
-      _routeDistance = 0.0;
-      if (filteredPlaces.isNotEmpty) {
-        _pageController.jumpToPage(0);
-        _onPageChanged(0);
-      }
-    });
-  }
-
-  void _showErrorSnackBar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            style: const TextStyle(color: AppColors.primaryText),
-          ),
-          backgroundColor: AppColors.errorRed,
-        ),
-      );
-    }
-  }
-
-  void _onPageChanged(int index) {
-    if (index < 0 || index >= filteredPlaces.length) return;
-    setState(() {
-      _currentPageIndex = index;
-    });
-    final place = filteredPlaces[index];
-    _fetchAndDisplayRoute(place["lat"], place["lng"]);
-  }
-
-  Future<void> _fetchAndDisplayRoute(double destLat, double destLng) async {
-    if (_currentLocation == null) {
-      _showErrorSnackBar("Current location not available. Cannot fetch route.");
-      return;
-    }
-
-    final startLat = _currentLocation!.latitude;
-    final startLng = _currentLocation!.longitude;
-
-    final url =
-        'https://router.project-osrm.org/route/v1/driving/$startLng,$startLat;$destLng,$destLat?overview=full&geometries=geojson';
-
-    try {
-      final response = await http.get(Uri.parse(url));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final list = jsonDecode(response.body) as List;
 
-        if (data['routes'] != null && data['routes'].isNotEmpty) {
-          final routeData = data['routes'][0];
-          final double distanceInKm = (routeData['distance'] ?? 0.0) / 1000.0;
+        parkingPlaces = list.map<Map<String, dynamic>>((area) {
+          return {
+            "id": area['id'],
+            "name": area['name'] ?? "Parking",
+            "cars": area['available_car_slots'] ?? 0,
+            "bikes": area['available_bike_slots'] ?? 0,
+            "lat": (area['location']?['lat'] ?? 0.0).toDouble(),
+            "lng": (area['location']?['lng'] ?? 0.0).toDouble(),
+            "photo": area['photo_url'] ??
+                area['image'] ??
+                "https://images.pexels.com/photos/210019/pexels-photo-210019.jpeg",
+            "popularity_score": area['popularity_score'] ?? 0,
+          };
+        }).toList();
 
-// ⭐ NEW: extract ETA duration (seconds → minutes)
-          final double durationInMin = ((routeData['duration'] ?? 0.0) / 60.0);
-
-          final List<dynamic> coordinates =
-              routeData['geometry']['coordinates'];
-
-          final List<LatLng> route = coordinates
-              .map((c) => LatLng((c as List<dynamic>)[1].toDouble(),
-                  (c as List<dynamic>)[0].toDouble()))
-              .toList();
-
-          setState(() {
-            _routePoints = route;
-            _routeDistance = distanceInKm;
-            _routeEta = durationInMin; // ⭐ NEW
-          });
-
-          if (route.isNotEmpty && mounted) {
-            _mapController.fitCamera(
-              CameraFit.coordinates(
-                coordinates: [_currentLocation!, ...route],
-                padding: const EdgeInsets.all(50.0),
-              ),
-            );
-          }
-        } else {
-          _showErrorSnackBar("No route found.");
-        }
-      } else {
-        _showErrorSnackBar("Failed to get route: ${response.body}");
+        _computeLists();
       }
-    } catch (e) {
-      _showErrorSnackBar("Error fetching route: $e");
+    } catch (_) {
+      parkingPlaces = [];
     }
   }
 
-  // --- ADDED ---
-  /// Handles navigation for the bottom bar
-  void _onBottomNavItemTapped(int index) {
-    if (index == 0) {
-      // Current screen (Map), do nothing
-      return;
+  void _computeLists() {
+    if (_currentLocation != null) {
+      double lat = _currentLocation!.latitude;
+      double lng = _currentLocation!.longitude;
+
+      final withDist = parkingPlaces.map((p) {
+        double d = _distanceInKm(lat, lng, p['lat'], p['lng']);
+        return {...p, "distanceKm": d};
+      }).toList();
+
+      withDist.sort((a, b) => a['distanceKm'].compareTo(b['distanceKm']));
+      nearbyPlaces = withDist.where((p) => p['distanceKm'] <= 8).toList();
+    } else {
+      nearbyPlaces = parkingPlaces.take(6).toList();
     }
 
-    if (index == 1) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              MyBookingsScreen(phoneNumber: widget.phoneNumber),
-        ),
-      ).then((_) {
-        // When returning from profile, reset index to 0 (Map)
-        if (mounted) {
-          setState(() => _bottomNavIndex = 0);
-        }
-      });
-    }
+    popularPlaces = List.from(parkingPlaces);
+    popularPlaces.sort(
+        (a, b) => (b['popularity_score']).compareTo(a['popularity_score']));
+  }
 
-    if (index == 2) {
-      // Navigate to Profile
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ProfileScreen(phoneNumber: widget.phoneNumber),
-        ),
-      ).then((_) {
-        // When returning from profile, reset index to 0 (Map)
-        if (mounted) {
-          setState(() => _bottomNavIndex = 0);
-        }
-      });
-    }
+  double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371.0;
+    double dLat = _deg(lat2 - lat1);
+    double dLon = _deg(lon2 - lon1);
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_deg(lat1)) * cos(_deg(lat2)) * sin(dLon / 2) * sin(dLon / 2);
+    return R * 2 * atan2(sqrt(a), sqrt(1 - a));
+  }
 
-    // Set the state to visually update the bar *before* navigating
-    if (index != 1) {
-      // Don't set state for the placeholder 'Bookings' tab
-      setState(() {
-        _bottomNavIndex = index;
-      });
-    }
+  double _deg(double deg) => deg * pi / 180;
+
+  String _eta(Map<String, dynamic> place) {
+    if (_currentLocation == null) return "-";
+
+    double dist = _distanceInKm(_currentLocation!.latitude,
+        _currentLocation!.longitude, place['lat'], place['lng']);
+
+    double minutes = (dist / 30) * 60;
+    if (minutes < 1) return "1 min";
+    return "${minutes.round()} min";
+  }
+
+  String _formatKm(Map<String, dynamic> place) {
+    if (_currentLocation == null) return "-";
+
+    double dist = _distanceInKm(_currentLocation!.latitude,
+        _currentLocation!.longitude, place['lat'], place['lng']);
+
+    return "${dist.toStringAsFixed(1)} km";
+  }
+
+  List<Map<String, dynamic>> _applySearch(List<Map<String, dynamic>> list) {
+    if (searchQuery.isEmpty) return list;
+    return list
+        .where(
+            (p) => p['name'].toLowerCase().contains(searchQuery.toLowerCase()))
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final collapsedCardWidth = min(300.0, width * 0.72);
+
     return Scaffold(
-      backgroundColor: AppColors.appBackground,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text(
-          "ParkEasy",
-          style: GoogleFonts.poppins(color: AppColors.primaryText),
-        ),
-        backgroundColor: AppColors.appBarColor,
-        elevation: 0,
-        actions: [
-          // --- REMOVED ---
-          // The profile button is now in the BottomNavigationBar
-        ],
-      ),
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _currentLocation ??
-                  const LatLng(8.5241, 76.9366), // Fallback center
-              initialZoom: 14.0,
-            ),
-            children: [
-              TileLayer(
-                // --- LIGHT MAP AS REQUESTED ---
-                urlTemplate:
-                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                tileProvider: NetworkTileProvider(),
-              ),
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: _routePoints,
-                    color: AppColors.routeColor,
-                    strokeWidth: 5,
-                  ),
-                ],
-              ),
-              MarkerLayer(
-                markers: [
-                  if (_currentLocation != null)
-                    Marker(
-                      width: 80.0,
-                      height: 80.0,
-                      point: _currentLocation!,
-                      child: const Icon(
-                        Icons.my_location,
-                        color: AppColors.markerColor,
-                        size: 30,
-                      ),
-                    ),
-                  if (filteredPlaces.isNotEmpty &&
-                      _currentPageIndex < filteredPlaces.length)
-                    Marker(
-                      width: 80.0,
-                      height: 80.0,
-                      point: LatLng(
-                        filteredPlaces[_currentPageIndex]["lat"],
-                        filteredPlaces[_currentPageIndex]["lng"],
-                      ),
-                      child: const Icon(
-                        Icons.location_pin,
-                        color: AppColors.markerColor, // Use accent color
-                        size: 35,
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-
-          // --- SEARCH BAR ---
-          // ✅ ADD HERE — radius slider UI
-// --- SEARCH BAR ---
-          Positioned(
-            top: 10,
-            left: 15,
-            right: 15,
-            child: _buildSearchSection(),
-          ),
-
-// --- RADIUS SLIDER ---
-          Positioned(
-            top: 120,
-            left: 15,
-            right: 15,
-            child: Column(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardSurface,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.shadow,
-                        blurRadius: 8,
-                      )
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        "Radius: ${_getRadiusLabel(_selectedRadiusKm)}",
-                        style: const TextStyle(
-                          color: AppColors.primaryText,
-                          fontSize: 14,
-                        ),
-                      ),
-// radius options: <2 km, 2–5 km, 5–8 km, 8+ km
-
-                      Slider(
-                        min: 0,
-                        max: (radiusSteps.length - 1).toDouble(),
-                        divisions: radiusSteps.length - 1,
-                        value:
-                            radiusSteps.indexOf(_selectedRadiusKm).toDouble(),
-                        label: _getRadiusLabel(_selectedRadiusKm),
-                        activeColor: Colors.white,
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedRadiusKm = radiusSteps[value.round()];
-                          });
-                          _applyRadiusFilter();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // --- DISTANCE DISPLAY ---
-          if (_routeDistance > 0)
-            Positioned(
-              top: 75,
-              left: 15,
-              right: 15,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 8.0, horizontal: 12.0),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardSurface,
-                    borderRadius: BorderRadius.circular(30.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.shadow,
-                        spreadRadius: 1,
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    "Distance: ${_routeDistance.toStringAsFixed(1)} km",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryText,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // --- HORIZONTAL SCROLLING PARKING LIST ---
-          Positioned(
-            // --- MODIFIED ---
-            // Was 20, changed to 80 to be above the new BottomNavigationBar
-            bottom: 10,
-            left: 0,
-            right: 0,
-            child: SizedBox(
-              height: 200,
-              child: isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                      color: AppColors.primaryText,
-                    ))
-                  : filteredPlaces.isEmpty
-                      ? const Center(
-                          child: Text(
-                            "No parking areas found.",
-                            style: TextStyle(
-                              color: AppColors.primaryText,
-                              backgroundColor: Colors.transparent,
-                              fontSize: 16,
-                            ),
-                          ),
-                        )
-                      : PageView.builder(
-                          controller: _pageController,
-                          itemCount: filteredPlaces.length,
-                          onPageChanged: _onPageChanged,
-                          itemBuilder: (context, index) {
-                            final place = filteredPlaces[index];
-                            return _buildParkingCard(context, place, _routeEta);
-                          },
-                        ),
-            ),
-          ),
-        ],
-      ),
-      // --- ADDED ---
-      // The new Bottom Navigation Bar
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: AppColors.appBarColor, // Match app bar
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.directions_car_filled_rounded),
-            activeIcon: Icon(Icons.directions_car_rounded),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.local_parking_outlined),
-            activeIcon: Icon(Icons.local_parking_rounded),
-            label: 'Activity',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_circle_outlined),
-            activeIcon: Icon(Icons.account_circle_rounded),
-            label: 'Profile',
-          ),
-        ],
-        currentIndex: _bottomNavIndex,
-        selectedItemColor: AppColors.primaryText, // Active icon color
-        unselectedItemColor: AppColors.hintText, // Inactive icon color
-        onTap: _onBottomNavItemTapped,
-        type: BottomNavigationBarType.fixed, // Keeps all visible
-        showUnselectedLabels: true,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w500),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w400),
-      ),
-
-      // --- END ADDED SECTION ---
-    );
-  }
-
-  Widget _buildSearchSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.searchBarColor,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            spreadRadius: 1,
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: TextField(
-        onChanged: _filterParkingPlaces,
-        style: const TextStyle(color: AppColors.primaryText),
-        decoration: const InputDecoration(
-          hintText: "Where to?",
-          hintStyle: TextStyle(color: AppColors.hintText),
-          prefixIcon: Icon(Icons.search, color: AppColors.hintText),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildParkingCard(
-      BuildContext context, Map<String, dynamic> place, double eta) {
-    final carSlotsText = place["cars"] == 0 ? "Full" : place["cars"].toString();
-    final bikeSlotsText =
-        place["bikes"] == 0 ? "Full" : place["bikes"].toString();
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Stack(
           children: [
-            Text(
-              place["name"],
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryText),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            _buildMainContent(collapsedCardWidth),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 18,
+              child: _buildGlassyNavBar(),
             ),
-
-            const SizedBox(height: 6),
-
-// ⭐ NEW — ETA row
-            Row(
-              children: [
-                Icon(Icons.access_time,
-                    size: 18, color: AppColors.secondaryText),
-                SizedBox(width: 6),
-                Text(
-                  "${eta.toStringAsFixed(0)} min away",
-                  style:
-                      TextStyle(color: AppColors.secondaryText, fontSize: 13),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-
-            Row(
-              children: [
-                _buildInfoItem(
-                  icon: Icons.directions_car,
-                  value: carSlotsText,
-                  label: "Cars",
-                ),
-                const SizedBox(width: 12),
-                _buildInfoItem(
-                  icon: Icons.motorcycle,
-                  value: bikeSlotsText,
-                  label: "Bikes",
-                ),
-              ],
-            ),
-            const Spacer(),
-            // --- MODIFIED BUTTON SECTION ---
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () =>
-                        _openGoogleMaps(place["lat"], place["lng"]),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      side: const BorderSide(
-                          color: AppColors.outlinedButtonColor),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text(
-                      "Directions",
-                      style:
-                          TextStyle(fontSize: 16, color: AppColors.primaryText),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _navigateToBookingScreen(context, place),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: AppColors.elevatedButtonBg,
-                      foregroundColor: AppColors.darkText,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child:
-                        const Text("Book Now", style: TextStyle(fontSize: 16)),
-                  ),
-                ),
-              ],
-            ),
-            // --- END OF MODIFIED SECTION ---
           ],
         ),
       ),
     );
   }
 
-  void _navigateToBookingScreen(
-      BuildContext context, Map<String, dynamic> place) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => BookingScreen(
-          location: place["name"],
-          parkingId: place["id"].toString(),
-          phoneNumber: widget.phoneNumber,
-        ),
-      ),
-    ).then((_) {
-      // Refresh parking data when returning from booking
-      _fetchParkingAreas();
-    });
-  }
-
-  Widget _buildInfoItem(
-      {required IconData icon, required String value, required String label}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.infoItemBg,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
+  Widget _buildMainContent(double collapsedCardWidth) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: AppColors.secondaryText),
-          const SizedBox(width: 6),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryText),
-              ),
-              Text(
-                label,
-                style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
-              ),
-            ],
-          ),
+          _buildGreetingRow(),
+          const SizedBox(height: 20),
+          _buildHeading(),
+          const SizedBox(height: 16),
+          _buildSearchBar(),
+          const SizedBox(height: 18),
+
+          // NEARBY
+          _buildSectionHeader(
+              "Nearby Parking",
+              () => setState(() => nearbyExpanded = !nearbyExpanded),
+              nearbyExpanded),
+          const SizedBox(height: 12),
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : nearbyExpanded
+                  ? _buildFullWidthList(_applySearch(nearbyPlaces))
+                  : SizedBox(
+                      height: 245,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _applySearch(nearbyPlaces).length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) => SizedBox(
+                            width: collapsedCardWidth,
+                            child: _buildParkingCard(
+                                _applySearch(nearbyPlaces)[index])),
+                      ),
+                    ),
+
+          const SizedBox(height: 22),
+
+          // POPULAR
+          _buildSectionHeader(
+              "Popular Parking",
+              () => setState(() => popularExpanded = !popularExpanded),
+              popularExpanded),
+          const SizedBox(height: 12),
+          isLoading
+              ? const SizedBox.shrink()
+              : popularExpanded
+                  ? _buildFullWidthList(_applySearch(popularPlaces))
+                  : SizedBox(
+                      height: 245,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _applySearch(popularPlaces).length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) => SizedBox(
+                            width: collapsedCardWidth,
+                            child: _buildParkingCard(
+                                _applySearch(popularPlaces)[index])),
+                      ),
+                    ),
+
+          const SizedBox(height: 120),
         ],
       ),
     );
   }
 
-  // --- FIXED GOOGLE MAPS LAUNCHER ---
-  Future<void> _openGoogleMaps(double destLat, double destLng) async {
-    if (_currentLocation == null) {
-      _showErrorSnackBar("Current location not available for directions.");
-      return;
-    }
-
-    // This format creates a cross-platform (iOS/Android) URL
-    final String googleMapsUrl =
-        "https://www.google.com/maps/dir/?api=1&origin=${_currentLocation!.latitude},${_currentLocation!.longitude}&destination=$destLat,$destLng&travelmode=driving";
-
-    final Uri url = Uri.parse(googleMapsUrl);
-
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url,
-          mode: LaunchMode.externalApplication); // Opens in Google Maps app
-    } else {
-      _showErrorSnackBar("Could not open Google Maps");
-    }
+  Widget _buildGreetingRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Hello, $userName",
+                style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.titleText),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.location_on_outlined,
+                      size: 14, color: AppColors.subtleText),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      userLocationLabel,
+                      style: GoogleFonts.poppins(
+                          color: AppColors.subtleText, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        InkWell(
+          onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) =>
+                      ProfileScreen(phoneNumber: widget.phoneNumber))),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                    color: AppColors.shadow,
+                    blurRadius: 8,
+                    offset: const Offset(0, 4)),
+              ],
+            ),
+            child: const Icon(Icons.person, color: AppColors.titleText),
+          ),
+        )
+      ],
+    );
   }
+
+  Widget _buildHeading() {
+    return Text(
+      "Ready to find your perfect\nParking spot?",
+      style: GoogleFonts.poppins(
+        fontSize: 23,
+        fontWeight: FontWeight.w600,
+        color: AppColors.titleText,
+        height: 1.05,
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, VoidCallback onTap, bool expanded) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title,
+            style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppColors.titleText)),
+        InkWell(
+          onTap: onTap,
+          child: Row(
+            children: [
+              Text("See all",
+                  style:
+                      GoogleFonts.poppins(color: AppColors.hint, fontSize: 13)),
+              const SizedBox(width: 6),
+              Icon(expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18, color: AppColors.hint),
+            ],
+          ),
+        )
+      ],
+    );
+  }
+
+  Widget _buildFullWidthList(List<Map<String, dynamic>> list) {
+    return Column(
+      children: list
+          .map((p) => Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: _buildParkingCard(p),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white, // 🔥 Full white search bar
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (v) => setState(() => searchQuery = v.trim()),
+              style: GoogleFonts.poppins(
+                color: AppColors.titleText,
+                fontSize: 14,
+              ),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.white, // 🔥 OVERRIDES DARK THEME
+                hintText: "Search for parking spot",
+                hintStyle: GoogleFonts.poppins(
+                  color: Colors.grey.shade400, // 🔥 soft placeholder
+                  fontSize: 13,
+                ),
+                prefixIcon: Icon(Icons.search,
+                    color: Colors.grey.shade500,
+                    size: 20), // 🔥 soft search icon
+                border: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+              ),
+            ),
+          ),
+
+          // Filter Chip
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.gold.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.filter_alt_outlined,
+                      size: 18, color: AppColors.gold),
+                  const SizedBox(width: 6),
+                  Text("Filters",
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: AppColors.titleText,
+                      ))
+                ],
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParkingCard(Map<String, dynamic> place) {
+    final cars = place['cars'] ?? 0;
+    final bikes = place['bikes'] ?? 0;
+    final eta = _eta(place);
+    final dist = _formatKm(place);
+
+    final photoUrl = place['photo'];
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => BookingScreen(
+                    location: place['name'],
+                    parkingId: place['id'].toString(),
+                    phoneNumber: widget.phoneNumber,
+                  ))),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.cardBg,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.shadow,
+                blurRadius: 12,
+                offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min, // auto height
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(14), topRight: Radius.circular(14)),
+              child: AspectRatio(
+                aspectRatio: 16 / 7,
+                child: Image.network(
+                  photoUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey[200], child: const Icon(Icons.image)),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Row 1 — slots and price
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.directions_car,
+                              size: 16, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Text("$cars cars",
+                              style: GoogleFonts.poppins(
+                                  fontSize: 13, color: AppColors.subtleText)),
+                          const SizedBox(width: 12),
+                          const Icon(Icons.pedal_bike,
+                              size: 16, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Text("$bikes bikes",
+                              style: GoogleFonts.poppins(
+                                  fontSize: 13, color: AppColors.subtleText)),
+                        ],
+                      ),
+                      Text("₹30/hr",
+                          style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.titleText)),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Parking Name
+                  Text(
+                    place['name'],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.titleText),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // ETA + Distance
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time,
+                              size: 16, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Text(eta,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 13, color: AppColors.subtleText)),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on,
+                              size: 16, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Text(dist,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 13, color: AppColors.subtleText)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassyNavBar() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 70,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            color: AppColors.glassBg,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6))
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _navItem(Icons.home, "Home", () {}),
+              _navItem(Icons.map_outlined, "Map", () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            MyBookingsScreen(phoneNumber: widget.phoneNumber)));
+              }),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => MyBookingsScreen(
+                              phoneNumber: widget.phoneNumber)));
+                },
+                child: Container(
+                  height: 56,
+                  width: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                          color: AppColors.accent.withOpacity(0.28),
+                          blurRadius: 12,
+                          offset: const Offset(0, 8))
+                    ],
+                  ),
+                  child: const Icon(Icons.local_parking_rounded,
+                      color: Colors.white, size: 28),
+                ),
+              ),
+              _navItem(Icons.list_alt, "Bookings", () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            MyBookingsScreen(phoneNumber: widget.phoneNumber)));
+              }),
+              _navItem(Icons.account_circle, "Profile", () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            ProfileScreen(phoneNumber: widget.phoneNumber)));
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white.withOpacity(0.9), size: 20),
+          const SizedBox(height: 4),
+          Text(label,
+              style: GoogleFonts.poppins(
+                  fontSize: 10, color: Colors.white.withOpacity(0.85))),
+        ],
+      ),
+    );
+  }
+}
+
+class LatLng {
+  final double latitude;
+  final double longitude;
+  LatLng(this.latitude, this.longitude);
 }

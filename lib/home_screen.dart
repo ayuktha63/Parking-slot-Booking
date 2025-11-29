@@ -16,7 +16,7 @@ class AppColors {
   static const Color cardBg = Color(0xFFFFFFFF);
   static const Color subtleText = Color(0xFF9AA0A6);
   static const Color titleText = Color(0xFF222222);
-  static const Color accent = Color(0xFF7B61FF); // purple
+  static const Color accent = Color(0xFF7B61FF);
   static const Color gold = Color(0xFFFCC417);
   static const Color glassBg = Color.fromRGBO(255, 255, 255, 0.15);
   static const Color shadow = Color.fromRGBO(33, 33, 33, 0.08);
@@ -39,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoading = true;
   String userName = "Prasad";
   String userLocationLabel = "Trivandrum, Kerala";
+
   LatLng? _currentLocation;
 
   List<Map<String, dynamic>> parkingPlaces = [];
@@ -60,23 +61,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initialize() async {
     setState(() => isLoading = true);
+
     await _getDeviceLocation();
     await _fetchUserProfile();
     await _fetchParkingAreas();
+
     setState(() => isLoading = false);
   }
 
+  // -----------------------------------------------------------
+  // FIX 1: If GPS fails, fallback to Trivandrum coordinates
+  // -----------------------------------------------------------
   Future<void> _getDeviceLocation() async {
     try {
       bool enabled = await Geolocator.isLocationServiceEnabled();
-      if (!enabled) return;
+      if (!enabled) {
+        _currentLocation = LatLng(8.5241, 76.9366); // Trivandrum
+        return;
+      }
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) return;
+          permission == LocationPermission.deniedForever) {
+        _currentLocation = LatLng(8.5241, 76.9366);
+        return;
+      }
 
       Position pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.best);
@@ -84,16 +96,23 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _currentLocation = LatLng(pos.latitude, pos.longitude);
       });
-    } catch (_) {}
+    } catch (_) {
+      _currentLocation = LatLng(8.5241, 76.9366);
+    }
   }
 
+  // -----------------------------------------------------------
+  // FIX 2: Correct API route /api/users/profile/:phone
+  // -----------------------------------------------------------
   Future<void> _fetchUserProfile() async {
     try {
-      final response = await http
-          .get(Uri.parse('https://$apiHost/api/users/${widget.phoneNumber}'));
+      final response = await http.get(
+        Uri.parse('https://$apiHost/api/users/profile/${widget.phoneNumber}'),
+      );
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
+
         setState(() {
           userName = json['name'] ?? userName;
           userLocationLabel = json['address'] ??
@@ -112,17 +131,21 @@ class _HomeScreenState extends State<HomeScreen> {
         final list = jsonDecode(response.body) as List;
 
         parkingPlaces = list.map<Map<String, dynamic>>((area) {
+          double lat = (area['location']?['lat'] ?? 0.0).toDouble();
+          double lng = (area['location']?['lng'] ?? 0.0).toDouble();
+
           return {
             "id": area['id'],
             "name": area['name'] ?? "Parking",
             "cars": area['available_car_slots'] ?? 0,
             "bikes": area['available_bike_slots'] ?? 0,
-            "lat": (area['location']?['lat'] ?? 0.0).toDouble(),
-            "lng": (area['location']?['lng'] ?? 0.0).toDouble(),
+            "lat": lat,
+            "lng": lng,
             "photo": area['photo_url'] ??
                 area['image'] ??
                 "https://images.pexels.com/photos/210019/pexels-photo-210019.jpeg",
             "popularity_score": area['popularity_score'] ?? 0,
+            "validLocation": lat != 0.0 && lng != 0.0,
           };
         }).toList();
 
@@ -133,25 +156,30 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // -----------------------------------------------------------
+  // FIX 3: Parking with invalid lat/lng will still show
+  // -----------------------------------------------------------
   void _computeLists() {
     if (_currentLocation != null) {
       double lat = _currentLocation!.latitude;
       double lng = _currentLocation!.longitude;
 
       final withDist = parkingPlaces.map((p) {
+        if (p["validLocation"] == false) {
+          return {...p, "distanceKm": 9999.0};
+        }
         double d = _distanceInKm(lat, lng, p['lat'], p['lng']);
         return {...p, "distanceKm": d};
       }).toList();
 
       withDist.sort((a, b) => a['distanceKm'].compareTo(b['distanceKm']));
-      nearbyPlaces = withDist.where((p) => p['distanceKm'] <= 8).toList();
-    } else {
-      nearbyPlaces = parkingPlaces.take(6).toList();
+
+      // FIX: remove 8km restriction → show all
+      nearbyPlaces = withDist;
     }
 
-    popularPlaces = List.from(parkingPlaces);
-    popularPlaces.sort(
-        (a, b) => (b['popularity_score']).compareTo(a['popularity_score']));
+    popularPlaces = List.from(parkingPlaces)
+      ..sort((a, b) => b['popularity_score'].compareTo(a['popularity_score']));
   }
 
   double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
@@ -166,10 +194,14 @@ class _HomeScreenState extends State<HomeScreen> {
   double _deg(double deg) => deg * pi / 180;
 
   String _eta(Map<String, dynamic> place) {
-    if (_currentLocation == null) return "-";
+    if (_currentLocation == null || place["validLocation"] == false) return "-";
 
-    double dist = _distanceInKm(_currentLocation!.latitude,
-        _currentLocation!.longitude, place['lat'], place['lng']);
+    double dist = _distanceInKm(
+      _currentLocation!.latitude,
+      _currentLocation!.longitude,
+      place['lat'],
+      place['lng'],
+    );
 
     double minutes = (dist / 30) * 60;
     if (minutes < 1) return "1 min";
@@ -177,11 +209,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _formatKm(Map<String, dynamic> place) {
-    if (_currentLocation == null) return "-";
-
-    double dist = _distanceInKm(_currentLocation!.latitude,
-        _currentLocation!.longitude, place['lat'], place['lng']);
-
+    if (_currentLocation == null || place["validLocation"] == false) return "-";
+    double dist = _distanceInKm(
+      _currentLocation!.latitude,
+      _currentLocation!.longitude,
+      place['lat'],
+      place['lng'],
+    );
     return "${dist.toStringAsFixed(1)} km";
   }
 
@@ -216,6 +250,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // -----------------------------------------------------------
+  // UI COMPONENTS (unchanged, cleaned)
+  // -----------------------------------------------------------
   Widget _buildMainContent(double collapsedCardWidth) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
@@ -228,12 +265,11 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           _buildSearchBar(),
           const SizedBox(height: 18),
-
-          // NEARBY
           _buildSectionHeader(
-              "Nearby Parking",
-              () => setState(() => nearbyExpanded = !nearbyExpanded),
-              nearbyExpanded),
+            "Nearby Parking",
+            () => setState(() => nearbyExpanded = !nearbyExpanded),
+            nearbyExpanded,
+          ),
           const SizedBox(height: 12),
           isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -246,37 +282,34 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemCount: _applySearch(nearbyPlaces).length,
                         separatorBuilder: (_, __) => const SizedBox(width: 12),
                         itemBuilder: (context, index) => SizedBox(
-                            width: collapsedCardWidth,
-                            child: _buildParkingCard(
-                                _applySearch(nearbyPlaces)[index])),
+                          width: collapsedCardWidth,
+                          child: _buildParkingCard(
+                              _applySearch(nearbyPlaces)[index]),
+                        ),
                       ),
                     ),
-
           const SizedBox(height: 22),
-
-          // POPULAR
           _buildSectionHeader(
-              "Popular Parking",
-              () => setState(() => popularExpanded = !popularExpanded),
-              popularExpanded),
+            "Popular Parking",
+            () => setState(() => popularExpanded = !popularExpanded),
+            popularExpanded,
+          ),
           const SizedBox(height: 12),
-          isLoading
-              ? const SizedBox.shrink()
-              : popularExpanded
-                  ? _buildFullWidthList(_applySearch(popularPlaces))
-                  : SizedBox(
-                      height: 245,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _applySearch(popularPlaces).length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) => SizedBox(
-                            width: collapsedCardWidth,
-                            child: _buildParkingCard(
-                                _applySearch(popularPlaces)[index])),
-                      ),
+          popularExpanded
+              ? _buildFullWidthList(_applySearch(popularPlaces))
+              : SizedBox(
+                  height: 245,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _applySearch(popularPlaces).length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) => SizedBox(
+                      width: collapsedCardWidth,
+                      child:
+                          _buildParkingCard(_applySearch(popularPlaces)[index]),
                     ),
-
+                  ),
+                ),
           const SizedBox(height: 120),
         ],
       ),
@@ -294,9 +327,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 "Hello, $userName",
                 style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.titleText),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.titleText,
+                ),
               ),
               const SizedBox(height: 6),
               Row(
@@ -319,10 +353,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         InkWell(
           onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) =>
-                      ProfileScreen(phoneNumber: widget.phoneNumber))),
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProfileScreen(phoneNumber: widget.phoneNumber),
+            ),
+          ),
           child: Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
@@ -337,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: const Icon(Icons.person, color: AppColors.titleText),
           ),
-        )
+        ),
       ],
     );
   }
@@ -375,7 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   size: 18, color: AppColors.hint),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -383,10 +418,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFullWidthList(List<Map<String, dynamic>> list) {
     return Column(
       children: list
-          .map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: _buildParkingCard(p),
-              ))
+          .map(
+            (p) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: _buildParkingCard(p),
+            ),
+          )
           .toList(),
     );
   }
@@ -394,14 +431,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSearchBar() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, // 🔥 Full white search bar
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Row(
@@ -409,29 +445,22 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: TextField(
               onChanged: (v) => setState(() => searchQuery = v.trim()),
-              style: GoogleFonts.poppins(
-                color: AppColors.titleText,
-                fontSize: 14,
-              ),
+              style:
+                  GoogleFonts.poppins(color: AppColors.titleText, fontSize: 14),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: Colors.white, // 🔥 OVERRIDES DARK THEME
+                fillColor: Colors.white,
                 hintText: "Search for parking spot",
                 hintStyle: GoogleFonts.poppins(
-                  color: Colors.grey.shade400, // 🔥 soft placeholder
-                  fontSize: 13,
-                ),
-                prefixIcon: Icon(Icons.search,
-                    color: Colors.grey.shade500,
-                    size: 20), // 🔥 soft search icon
+                    color: Colors.grey.shade400, fontSize: 13),
+                prefixIcon:
+                    Icon(Icons.search, color: Colors.grey.shade500, size: 20),
                 border: InputBorder.none,
                 contentPadding:
                     const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
               ),
             ),
           ),
-
-          // Filter Chip
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: Container(
@@ -448,13 +477,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 6),
                   Text("Filters",
                       style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        color: AppColors.titleText,
-                      ))
+                          fontSize: 13, color: AppColors.titleText)),
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );
@@ -470,13 +497,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return GestureDetector(
       onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => BookingScreen(
-                    location: place['name'],
-                    parkingId: place['id'].toString(),
-                    phoneNumber: widget.phoneNumber,
-                  ))),
+        context,
+        MaterialPageRoute(
+          builder: (_) => BookingScreen(
+            location: place['name'],
+            parkingId: place['id'].toString(),
+            phoneNumber: widget.phoneNumber,
+          ),
+        ),
+      ),
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.cardBg,
@@ -490,7 +519,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // auto height
+          mainAxisSize: MainAxisSize.min,
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.only(
@@ -510,7 +539,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Row 1 — slots and price
+                  // Slots row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -533,23 +562,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       Text("₹30/hr",
                           style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.titleText)),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.titleText,
+                          )),
                     ],
                   ),
 
                   const SizedBox(height: 10),
 
-                  // Parking Name
+                  // Parking name
                   Text(
                     place['name'],
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.titleText),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.titleText,
+                    ),
                   ),
 
                   const SizedBox(height: 10),
@@ -605,7 +636,7 @@ class _HomeScreenState extends State<HomeScreen> {
               BoxShadow(
                   color: Colors.black.withOpacity(0.06),
                   blurRadius: 12,
-                  offset: const Offset(0, 6))
+                  offset: const Offset(0, 6)),
             ],
           ),
           child: Row(
@@ -614,18 +645,22 @@ class _HomeScreenState extends State<HomeScreen> {
               _navItem(Icons.home, "Home", () {}),
               _navItem(Icons.map_outlined, "Map", () {
                 Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            MyBookingsScreen(phoneNumber: widget.phoneNumber)));
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        MyBookingsScreen(phoneNumber: widget.phoneNumber),
+                  ),
+                );
               }),
               GestureDetector(
                 onTap: () {
                   Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => MyBookingsScreen(
-                              phoneNumber: widget.phoneNumber)));
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          MyBookingsScreen(phoneNumber: widget.phoneNumber),
+                    ),
+                  );
                 },
                 child: Container(
                   height: 56,
@@ -635,9 +670,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                          color: AppColors.accent.withOpacity(0.28),
-                          blurRadius: 12,
-                          offset: const Offset(0, 8))
+                        color: AppColors.accent.withOpacity(0.28),
+                        blurRadius: 12,
+                        offset: const Offset(0, 8),
+                      ),
                     ],
                   ),
                   child: const Icon(Icons.local_parking_rounded,
@@ -646,17 +682,21 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _navItem(Icons.list_alt, "Bookings", () {
                 Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            MyBookingsScreen(phoneNumber: widget.phoneNumber)));
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        MyBookingsScreen(phoneNumber: widget.phoneNumber),
+                  ),
+                );
               }),
               _navItem(Icons.account_circle, "Profile", () {
                 Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            ProfileScreen(phoneNumber: widget.phoneNumber)));
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProfileScreen(phoneNumber: widget.phoneNumber),
+                  ),
+                );
               }),
             ],
           ),
@@ -675,7 +715,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 4),
           Text(label,
               style: GoogleFonts.poppins(
-                  fontSize: 10, color: Colors.white.withOpacity(0.85))),
+                fontSize: 10,
+                color: Colors.white.withOpacity(0.85),
+              )),
         ],
       ),
     );

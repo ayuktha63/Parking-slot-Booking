@@ -402,7 +402,7 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
                             ),
                             child: Icon(
                               Icons.arrow_back,
-                              color: AppColors.subtleText,
+                              color: AppColors.titleText,
                             ),
                           ),
                         ),
@@ -415,7 +415,7 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
                               style: GoogleFonts.poppins(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.subtleText,
+                                color: AppColors.titleText,
                               ),
                             ),
                             const SizedBox(height: 4),

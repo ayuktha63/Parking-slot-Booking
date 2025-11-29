@@ -46,7 +46,7 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
   Set<int> selectedSlotNumbers = {};
   bool isLoading = true;
 
-  final double pricePerSlot = 30;
+  final double pricePerSlot = 1;
 
   @override
   void initState() {

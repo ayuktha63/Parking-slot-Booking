@@ -40,3 +40,4 @@ flutter:
     - assets/lottie/success.json
     - assets/lottie/main_car.json
     - assets/lottie/parking_animation.json
+    - assets/car.svg

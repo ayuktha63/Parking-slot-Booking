@@ -264,7 +264,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   width: 44,
                   decoration: BoxDecoration(
                     color: cardBg,
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
                           color: Colors.black.withOpacity(0.12),

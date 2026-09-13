@@ -10,26 +10,57 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^6.2.1
-  flutter_svg: ^2.0.7
-  url_launcher: ^6.3.0
-  cupertino_icons: ^1.0.8
-  lottie: ^3.1.0
-  http_parser: ^4.0.2
-  razorpay_flutter: ^1.3.9
-  pdf: ^3.11.3
-  path_provider: ^2.1.5
-  share_plus: ^10.1.4
-  intl: ^0.18.1
-  image_picker: ^1.1.2
-  provider: ^6.1.0
-  http: ^1.3.0
-  flutter_map: ^6.1.0
+
+  # ── State, routing, networking ──────────────────────────────────────────
+  flutter_riverpod: ^2.5.1        # async state as a first-class concept; every
+                                  # screen previously hand-rolled loading/error
+  go_router: ^14.2.7              # declarative routes + auth redirect guards,
+                                  # which imperative Navigator cannot express
+  dio: ^5.7.0                     # interceptors — required for transparent token
+                                  # refresh and one typed error path
+  flutter_secure_storage: ^9.2.2  # refresh token at rest; the app had NO persistence
+
+  # ── Maps & location (flutter_map/latlong2 were already declared, never used) ──
+  flutter_map: ^6.1.0             # OpenStreetMap: no API key, no billing account
   latlong2: ^0.9.0
   geolocator: ^11.0.0
+
+  # ── Real time ───────────────────────────────────────────────────────────
   socket_io_client: ^3.1.2
 
+  # ── Payments ────────────────────────────────────────────────────────────
+  razorpay_flutter: ^1.3.9
+
+  # ── UI ──────────────────────────────────────────────────────────────────
+  cached_network_image: ^3.4.1    # parking imagery was re-downloaded on every
+                                  # Home entry with no caching at all
+  flutter_svg: ^2.0.7
+  lottie: ^3.1.0
+  shimmer: ^3.0.0                 # skeletons instead of blank screens
+
+  # ── Utilities ───────────────────────────────────────────────────────────
+  intl: ^0.18.1
+  url_launcher: ^6.3.0            # "Get directions" hand-off to platform maps
+  share_plus: ^10.1.4
+
+  # ── Transitional ────────────────────────────────────────────────────────
+  # Required ONLY by the pre-transformation screens still present in lib/ (they
+  # are no longer reachable from main.dart, but Flutter still compiles them).
+  # Remove together with those files once every flow has migrated.
+  http: ^1.3.0
+
+# REMOVED in the transformation — declared but never imported:
+#   provider         no state management was ever adopted
+#   pdf              receipt PDF never built
+#   path_provider    would have paired with pdf
+#   image_picker     profile photo never built; pulled camera + photo-library
+#                    permissions for a feature that does not exist
+#   http             superseded by dio
+#   http_parser      transitive of http anyway
+
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
@@ -43,3 +74,35 @@ flutter:
     - assets/car.svg
     - assets/logo_q.png
     - assets/login_car.png
+
+  # ── Typography ────────────────────────────────────────────────────────────
+  # Bundled, not fetched. google_fonts downloads Inter from the network on first
+  # launch; until it lands (and forever, on a device that is offline or behind a
+  # filter) every screen renders in Roboto — which is precisely the "generic
+  # Flutter app" look this product is trying to leave behind. Typography is
+  # identity, so it ships in the binary.
+  #
+  # Inter and InterDisplay are one superfamily with two optical sizes. Display is
+  # drawn for large text: tighter spacing, finer joins, smaller apertures. Using
+  # it above ~20px and Inter below is real optical sizing rather than one face
+  # scaled up, and it is a large part of why headlines here look set rather than
+  # typed. Inter is SIL OFL 1.1; see assets/fonts/Inter-LICENSE.txt.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+    - family: InterDisplay
+      fonts:
+        - asset: assets/fonts/InterDisplay-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/InterDisplay-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/InterDisplay-ExtraBold.ttf
+          weight: 800

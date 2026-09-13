@@ -1,0 +1,169 @@
+{
+ "data": {
+  "parking_area_id": 1,
+  "vehicle_type": "car",
+  "window": {
+   "starts_at": "2026-09-12T17:30:53.825Z",
+   "ends_at": "2026-09-12T18:30:53.825Z",
+   "duration_minutes": 60,
+   "is_open": true
+  },
+  "summary": {
+   "total": 11,
+   "booked": 0,
+   "held": 0,
+   "closed": 1,
+   "available": 11
+  },
+  "rows": [
+   {
+    "label": "A",
+    "slots": [
+     {
+      "id": 1,
+      "code": "A1",
+      "slot_number": 1,
+      "position": 1,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 2,
+      "code": "A2",
+      "slot_number": 2,
+      "position": 2,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 3,
+      "code": "A3",
+      "slot_number": 3,
+      "position": 3,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 4,
+      "code": "A4",
+      "slot_number": 4,
+      "position": 4,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 5,
+      "code": "A5",
+      "slot_number": 5,
+      "position": 5,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 6,
+      "code": "A6",
+      "slot_number": 6,
+      "position": 6,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 7,
+      "code": "A7",
+      "slot_number": 7,
+      "position": 7,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 8,
+      "code": "A8",
+      "slot_number": 8,
+      "position": 8,
+      "slot_class": "standard",
+      "status": "closed",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": "maintenance"
+     }
+    ]
+   },
+   {
+    "label": "B",
+    "slots": [
+     {
+      "id": 9,
+      "code": "B1",
+      "slot_number": 9,
+      "position": 1,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 10,
+      "code": "B2",
+      "slot_number": 10,
+      "position": 2,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 11,
+      "code": "B3",
+      "slot_number": 11,
+      "position": 3,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     },
+     {
+      "id": 12,
+      "code": "B4",
+      "slot_number": 12,
+      "position": 4,
+      "slot_class": "standard",
+      "status": "available",
+      "held_by_you": false,
+      "hold_expires_at": null,
+      "closed_reason": null
+     }
+    ]
+   }
+  ],
+  "legend": [
+   "available",
+   "held",
+   "booked",
+   "closed"
+  ]
+ }
+}

@@ -1,0 +1,661 @@
+{
+    "data": [
+        {
+            "id": 1,
+            "name": "PARQX Test Central",
+            "slug": null,
+            "location": {
+                "lat": 12.9716,
+                "lng": 77.5946,
+                "address_line": "1 Test Road",
+                "locality": "Indiranagar",
+                "city": "Bengaluru",
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 11,
+                "available_slots": 11,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4500,
+                "hourly_display": "\u20b945",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": [
+                "cctv",
+                "covered",
+                "ev_charging"
+            ]
+        },
+        {
+            "id": 2,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 3,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 3,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4200,
+                "hourly_display": "\u20b942",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 4,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 5,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 6,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "closed"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": false,
+            "is_open_24_7": false,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 7,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 8,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 3,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4200,
+                "hourly_display": "\u20b942",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 9,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 10,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 11,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "closed"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": false,
+            "is_open_24_7": false,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 12,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 13,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 3,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4200,
+                "hourly_display": "\u20b942",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 14,
+            "name": "Lifecycle Lot 42466",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 3,
+                "available_slots": 3,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 15,
+            "name": "Contract Test Lot",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 4,
+                "available_slots": 4,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 16,
+            "name": "Lifecycle Lot 42501",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 3,
+                "available_slots": 3,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 17,
+            "name": "Lifecycle Lot 42513",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 2,
+                "available_slots": 2,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 18,
+            "name": "Lifecycle Lot 42516",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 3,
+                "available_slots": 3,
+                "state": "closed"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": false,
+            "is_open_24_7": false,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 19,
+            "name": "Lifecycle Lot 42520",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 3,
+                "available_slots": 3,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        },
+        {
+            "id": 20,
+            "name": "Lifecycle Lot 42537",
+            "slug": null,
+            "location": {
+                "lat": null,
+                "lng": null,
+                "address_line": null,
+                "locality": null,
+                "city": null,
+                "landmark": null
+            },
+            "distance_metres": null,
+            "eta_minutes": null,
+            "availability": {
+                "vehicle_type": "car",
+                "total_slots": 3,
+                "available_slots": 3,
+                "state": "available"
+            },
+            "price": {
+                "hourly_paise": 4000,
+                "hourly_display": "\u20b940",
+                "currency": "INR"
+            },
+            "rating": null,
+            "rating_count": 0,
+            "is_open_now": true,
+            "is_open_24_7": true,
+            "cover_photo_url": null,
+            "amenities": []
+        }
+    ],
+    "meta": {
+        "window": {
+            "starts_at": "2026-09-12T19:19:09.366Z",
+            "ends_at": "2026-09-12T20:19:09.366Z",
+            "duration_minutes": 60,
+            "vehicle_type": "car"
+        },
+        "page": {
+            "limit": 20,
+            "offset": 0,
+            "has_more": true
+        }
+    }
+}

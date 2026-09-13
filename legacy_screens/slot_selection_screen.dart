@@ -200,7 +200,9 @@ class _SlotSelectionScreenState extends State<SlotSelectionScreen> {
     final amount = (selectedSlotNumbers.length * price * 100).toInt();
 
     _razorpay.open({
-      'key': "rzp_live_R6QQALUuJwgDaD",
+      // SECURITY: the live key that was hardcoded here has been removed — see the
+      // note above. Supplied at build time, or (in the new flow) by the server.
+      'key': const String.fromEnvironment('RAZORPAY_KEY_ID'),
       'amount': amount,
       'name': "Parking Booking",
       'description': "Slot Booking",

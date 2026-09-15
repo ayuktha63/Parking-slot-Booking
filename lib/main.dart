@@ -15,25 +15,13 @@ import 'core/theme/app_theme.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Edge-to-edge. Home is map-first, and a map that stops short of the status
-  // bar behind an opaque strip looks like a widget embedded in an app rather
-  // than the surface of the app itself. Individual screens declare their own
-  // icon brightness with AnnotatedRegion — light over the dark map, dark over
-  // the light sheets — so this sets only the transparent, drawn-behind case.
+  // Edge-to-edge: the map runs under the status bar. Everything in the app is
+  // light, so system icons are dark throughout.
   SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.edgeToEdge,
     overlays: SystemUiOverlay.values,
   );
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-      systemNavigationBarIconBrightness: Brightness.dark,
-    ),
-  );
+  SystemChrome.setSystemUIOverlayStyle(AppTheme.overlay);
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -54,22 +42,9 @@ class ParqxApp extends ConsumerWidget {
       title: 'PARQX',
       debugShowCheckedModeBanner: false,
 
-      // ── The identity decision ────────────────────────────────────────────
-      //
-      // Premium light chrome over a deliberately DARK, desaturated map.
-      //
-      // This is a committed hybrid, not an unfinished dark mode. A parking app's
-      // job is to make availability findable at a glance; on a stock OSM
-      // basemap — beige roads, green parks, pink motorways — a price marker is
-      // one more coloured object in a busy field. On the near-black basemap
-      // PARQX renders (see AppMapStyle) the markers are the only saturated
-      // things on screen.
-      //
-      // Following the system into a half-checked dark theme is how the previous
-      // app ended up with a dark ThemeData wrapping a light UI, so the customer
-      // app pins itself to light and owns the contrast deliberately. The
-      // operator app is the dark one, and that difference is the point: the two
-      // products should never be mistaken for each other.
+      // Light, monochrome, mobility-class: white surfaces, black actions and a
+      // quiet light map. The customer app pins itself to this one look; the
+      // operator app keeps its own dark console language.
       theme: AppTheme.light(),
       themeMode: ThemeMode.light,
 
@@ -79,7 +54,11 @@ class ParqxApp extends ConsumerWidget {
         // 360px screen by test/render_harness_test.dart, which also renders the
         // card at 200% to prove the reflow path works.
         final mediaQuery = MediaQuery.of(context);
-        return MediaQuery(
+        // One system-bar style for the whole app, so a screen that sets none
+        // cannot inherit a black navigation bar from wherever the user was last.
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: AppTheme.overlay,
+          child: MediaQuery(
           data: mediaQuery.copyWith(
             textScaler: mediaQuery.textScaler.clamp(
               minScaleFactor: 0.85,
@@ -87,6 +66,7 @@ class ParqxApp extends ConsumerWidget {
             ),
           ),
           child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );

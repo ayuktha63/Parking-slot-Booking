@@ -1,45 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// HOME — the map IS the home screen
+// HOME — the map
 //
-// ─────────────────────────────────────────────────────────────────────────────
-// WHAT THIS REPLACES, AND WHY IT WAS WRONG
+// A ride-app home: the whole screen is the map, and a white sheet rises from the
+// bottom holding the question ("Where do you want to park?") and the answers —
+// the places in view, as options you can compare and pick.
 //
-// The previous Home was a vertical stack of white boxes on a white page: a
-// greeting ("Good evening, Aashish") taking the most valuable pixels on the
-// screen, a large amber banner about location permission, a row of grey filter
-// chips, then a list of tall cards each carrying its own violet Reserve button.
-// The map — the single most useful object in a parking product — was reachable
-// only through a small "See map" text link.
+//   · The map searches what the camera shows. Moving it offers "Search this area".
+//   · A typed search is not limited to the camera: it searches the city and the
+//     map frames what it found.
+//   · Tapping a price pill selects that place: the map centres on it and it moves
+//     to the top of the sheet with a black outline.
 //
-// That ordering states the product's priorities, and they were backwards. A
-// driver opening a parking app is somewhere, in a car, now. They are not reading
-// a greeting; they are looking for a space near a point on a map. So:
-//
-//   * The map is the screen. Full-bleed, edge to edge, behind everything.
-//   * Search is the hero control, floating over the map, the largest target.
-//   * Results live in a sheet the user drags between "mostly map" and "mostly
-//     list". Both views are one screen, so there is no mode to lose track of.
-//   * The greeting is gone. It cost a line of display type to tell the user
-//     something they already knew.
-//   * Location failure is a quiet inline notice, not a banner the size of a
-//     card. It is a condition, not an emergency.
-//   * Vehicle type is a segmented switch, visually separate from filters.
-//     Car-or-bike changes what every price and count on screen MEANS; a filter
-//     merely narrows a list. Rendering them as identical grey chips in one row
-//     made a semantic difference invisible.
-//
-// THIS SCREEN ABSORBED THE EXPLORE TAB.
-//   Home and Explore had become two tabs rendering the same map against the same
-//   providers, differing only in what else was stacked on top. Keeping both
-//   would have meant maintaining two copies of camera handling, clustering and
-//   marker selection, and asking the user to learn which tab was the "real" map.
-//   Explore's logic lives here — camera tweening, grid clustering, viewport
-//   search, marker/list sync — and `/explore` redirects to `/home`. The nav is
-//   three real destinations instead of four, one of which was a duplicate.
+// Every number on screen — price, spots free, distance — is the server's.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -48,7 +26,8 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/config/app_config.dart';
-import '../../../core/providers/core_providers.dart';
+import '../../../core/network/api_exception.dart';
+import '../../../core/providers/booking_providers.dart';
 import '../../../core/providers/discovery_providers.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
@@ -56,17 +35,16 @@ import '../../../core/theme/tokens.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../core/utils/location_service.dart';
 import '../../../shared/models/parking.dart';
+import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/interaction.dart';
 import '../../../shared/widgets/map_canvas.dart';
-import '../../../shared/widgets/parqx_controls.dart';
 import '../../../shared/widgets/parking_card.dart';
+import '../../../shared/widgets/parqx_controls.dart';
 import '../../../shared/widgets/states.dart';
 import '../../../shared/widgets/surfaces.dart';
 import '../../explore/presentation/filter_sheet.dart';
 import '../../explore/presentation/map_marker.dart';
-import '../../../core/network/api_exception.dart';
 import '../../parking/data/parking_repository.dart' show GeoBounds, ParkingQuery, ParkingSort;
-
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -78,45 +56,26 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStateMixin {
   final MapController _map = MapController();
   final DraggableScrollableController _sheet = DraggableScrollableController();
+  ScrollController? _listController;
 
-  /// Guards the camera-move handler from firing while we move the camera
-  /// ourselves, which would otherwise offer "Search this area" after every
-  /// programmatic recentre.
   bool _programmaticMove = false;
   Timer? _moveDebounce;
-
-  /// Whether `FlutterMap` has actually mounted and linked its internal
-  /// controller to [_map]. Set by [MapOptions.onMapReady].
-  ///
-  /// Needed because `_map.camera` throws until that link exists — and
-  /// `_buildMarkers()` reads it synchronously while constructing `FlutterMap`'s
-  /// own `children` list, i.e. strictly BEFORE `FlutterMap`'s `initState` does
-  /// the linking. Every cold navigation to the map crashed with
-  /// `LateInitializationError: Field '_internalController' has not been
-  /// initialized` — found only by running on a device; `flutter analyze` cannot
-  /// see a lifecycle ordering bug like this.
-  ///
-  /// (`LateInitializationError` lives in `dart:_internal` and cannot be imported
-  /// or caught by name from app code, which is why this is a readiness flag
-  /// rather than a try/catch.)
   bool _mapReady = false;
-
-  // NB: no map-layers control.
-  //
-  // The reference shows one, and it was built and then removed. OpenStreetMap's
-  // raster tiles have no label-free, satellite or terrain variant: every option
-  // such a button could offer needs a tile source this app does not have and
-  // cannot get without an API key and a billing account. A layers button that
-  // opens a menu of one item, or that toggles something invisible, is a
-  // fabricated feature — which is the one thing this product does not do.
 
   double get _safeZoom => _mapReady ? _map.camera.zoom : AppConfig.mapDefaultZoom;
 
-  /// Sheet stops. Peek shows the header and the top of the first card — enough to
-  /// prove there are results without covering the map.
-  static const double _peek = 0.16;
-  static const double _mid = 0.46;
-  static const double _full = 0.92;
+  /// The same list for the same sizes. The sheet compares snap sizes by
+  /// identity, and a fresh list on every rebuild makes it re-settle to a snap
+  /// point each time — cutting off a drag in progress when results arrive.
+  List<double> _snapSizes = const [];
+
+  List<double> _snapSizesFor(double peek, double mid, double full) {
+    if (listEquals(_snapSizes, [peek, mid, full])) return _snapSizes;
+    return _snapSizes = List.unmodifiable([peek, mid, full]);
+  }
+
+  /// Height of the sheet's always-visible part: grabber, search and chips.
+  static const double _peekContent = 150;
 
   @override
   void initState() {
@@ -134,10 +93,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   Future<void> _initialise() async {
     await ref.read(locationProvider.notifier).initialise();
     if (!mounted) return;
-
     final centre = ref.read(locationProvider).position;
-    if (centre != null) _moveCamera(centre, AppConfig.mapDefaultZoom);
-    await _searchVisible();
+    if (centre != null) _focus(centre, AppConfig.mapDefaultZoom);
+    await _search();
+  }
+
+  /* ── searching ─────────────────────────────────────────────────────────── */
+
+  /// Searches by the typed term when there is one, otherwise by the viewport.
+  Future<void> _search() async {
+    if (!_mapReady) return;
+    final term = ref.read(discoveryQueryProvider).searchTerm;
+    if (term != null && term.trim().isNotEmpty) {
+      final positions = await ref.read(mapControllerProvider.notifier).searchText();
+      if (mounted) _frame(positions);
+      return;
+    }
+    await ref.read(mapControllerProvider.notifier).searchVisibleArea(_visibleBounds());
+  }
+
+  /// "Search this area": the viewport wins over a previous typed term.
+  Future<void> _searchThisArea() async {
+    ref.read(discoveryQueryProvider.notifier).setSearchTerm(null);
+    await ref.read(mapControllerProvider.notifier).searchVisibleArea(_visibleBounds());
   }
 
   GeoBounds _visibleBounds() {
@@ -150,46 +128,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     );
   }
 
-  Future<void> _searchVisible() async {
-    if (!_mapReady) return;
-    await ref.read(mapControllerProvider.notifier).searchVisibleArea(_visibleBounds());
+  /* ── camera ────────────────────────────────────────────────────────────── */
+
+  /// Where the camera must centre so that [target] lands in the middle of the
+  /// map that is actually visible — between the status bar and the sheet —
+  /// rather than behind the sheet.
+  LatLng _centreFor(LatLng target, double zoom, {double? sheetExtent}) {
+    if (!_mapReady) return target;
+    final media = MediaQuery.of(context);
+    final height = media.size.height;
+    final extent = sheetExtent ?? (_sheet.isAttached ? _sheet.size : 0.52);
+    final visibleMiddle = (media.padding.top + height * (1 - extent)) / 2;
+    final shift = height / 2 - visibleMiddle;
+    final crs = _map.camera.crs;
+    final point = crs.latLngToPoint(target, zoom);
+    return crs.pointToLatLng(math.Point(point.x, point.y + shift), zoom);
   }
 
-  /// Animated camera movement. `flutter_map` moves instantly, so the tween is
-  /// here — an instant jump gives the user no way to keep track of where the map
-  /// went, which is disorienting in a spatial interface.
+  /// Moves so [target] sits in the visible part of the map.
+  void _focus(LatLng target, double zoom, {double? sheetExtent}) {
+    _moveCamera(_centreFor(target, zoom, sheetExtent: sheetExtent), zoom);
+  }
+
   void _moveCamera(LatLng target, double zoom) {
     if (!_mapReady) return;
     _programmaticMove = true;
-
     final startCentre = _map.camera.center;
     final startZoom = _map.camera.zoom;
-
     final controller = AnimationController(vsync: this, duration: AppMotion.camera);
     final curve = CurvedAnimation(parent: controller, curve: AppMotion.decelerate);
-
-    final latTween = Tween(begin: startCentre.latitude, end: target.latitude);
-    final lngTween = Tween(begin: startCentre.longitude, end: target.longitude);
-    final zoomTween = Tween(begin: startZoom, end: zoom);
-
+    final lat = Tween(begin: startCentre.latitude, end: target.latitude);
+    final lng = Tween(begin: startCentre.longitude, end: target.longitude);
+    final z = Tween(begin: startZoom, end: zoom);
     controller.addListener(() {
-      _map.move(
-        LatLng(latTween.evaluate(curve), lngTween.evaluate(curve)),
-        zoomTween.evaluate(curve),
-      );
+      _map.move(LatLng(lat.evaluate(curve), lng.evaluate(curve)), z.evaluate(curve));
     });
-
     controller.forward().whenComplete(() {
       controller.dispose();
-      // Released on the next frame so the final move event is still suppressed.
       WidgetsBinding.instance.addPostFrameCallback((_) => _programmaticMove = false);
     });
+  }
+
+  /// Fits the camera around search results, leaving room for the sheet.
+  void _frame(List<LatLng> positions) {
+    if (!_mapReady || positions.isEmpty) return;
+    if (positions.length == 1) {
+      _focus(positions.first, 15.5);
+      return;
+    }
+    _programmaticMove = true;
+    final size = MediaQuery.sizeOf(context);
+    _map.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(positions),
+        padding: EdgeInsets.fromLTRB(56, 120, 56, size.height * 0.5),
+        maxZoom: 16,
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _programmaticMove = false);
   }
 
   void _onMapEvent(MapEvent event) {
     if (_programmaticMove) return;
     if (event is! MapEventMoveEnd && event is! MapEventFlingAnimationEnd) return;
-
     _moveDebounce?.cancel();
     _moveDebounce = Timer(const Duration(milliseconds: 150), () {
       if (!mounted) return;
@@ -200,63 +201,98 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     });
   }
 
-  /// Marker tap → select it and bring the sheet up far enough to show the card,
-  /// without burying the marker the user just touched.
-  void _selectParking(ParkingSummary parking) {
+  void _selectFromMap(ParkingSummary parking) {
+    Haptics.selection();
     ref.read(mapControllerProvider.notifier).selectParking(parking.id);
-
     final position = parking.location.latLng;
-    if (position != null) _moveCamera(position, _safeZoom);
-
-    if (_sheet.isAttached && _sheet.size < _peek + 0.02) {
-      _sheet.animateTo(_mid, duration: AppMotion.normal, curve: AppMotion.standard);
+    final targetExtent = _sheet.isAttached && _sheet.size < 0.45 ? 0.5 : null;
+    if (position != null) {
+      _focus(position, math.max(_safeZoom, 15), sheetExtent: targetExtent);
+    }
+    if (targetExtent != null) {
+      _sheet.animateTo(targetExtent, duration: AppMotion.normal, curve: AppMotion.standard);
+    }
+    final list = _listController;
+    if (list != null && list.hasClients && list.offset > 0) {
+      list.animateTo(0, duration: AppMotion.normal, curve: AppMotion.standard);
     }
   }
 
   Future<void> _recentre() async {
-    final notifier = ref.read(locationProvider.notifier);
-    await notifier.requestPermission();
+    await ref.read(locationProvider.notifier).requestPermission();
     if (!mounted) return;
-
     final position = ref.read(locationProvider).position;
     if (position != null) {
-      _moveCamera(position, AppConfig.mapDefaultZoom);
-      await _searchVisible();
+      _focus(position, AppConfig.mapDefaultZoom);
+      await Future<void>.delayed(AppMotion.camera);
+      if (mounted) await _searchThisArea();
+    } else {
+      final location = ref.read(locationProvider);
+      if (mounted && location.message.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text(location.message),
+            action: location.needsSystemSettings
+                ? SnackBarAction(
+                    label: 'Settings',
+                    onPressed: () => ref.read(locationProvider.notifier).openSettings(),
+                  )
+                : null,
+          ));
+      }
     }
   }
 
   Future<void> _openFilters() async {
     await showFilterSheet(context);
-    // Filters changed the shared discovery query; re-query the viewport so the
-    // map shows the same results as the list.
-    if (mounted) await _searchVisible();
+    if (mounted) await _search();
   }
+
+  Future<void> _openSearch() async {
+    await context.push(Routes.search);
+    // The search screen applies a term (or opens a place) itself; whatever the
+    // term is now is what the map should show.
+    if (mounted) await _search();
+  }
+
+  /* ── build ─────────────────────────────────────────────────────────────── */
 
   @override
   Widget build(BuildContext context) {
     final mapState = ref.watch(mapControllerProvider);
     final location = ref.watch(locationProvider);
     final query = ref.watch(discoveryQueryProvider);
-    final results = mapState.markers;
 
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    // Spot counts and prices on the map are a snapshot. When the customer's own
+    // booking changes — booked, parked, checked out — a spot somewhere just
+    // changed hands, so the snapshot is refreshed rather than left stale.
+    ref.listen(currentBookingProvider, (previous, next) {
+      final before = previous?.valueOrNull;
+      final after = next.valueOrNull;
+      if (before?.id != after?.id || before?.status != after?.status) _search();
+    });
 
-    // The status bar sits over the dark map, so its icons must be light. This is
-    // the payoff of committing to a dark map: the chrome above it is unambiguous.
+    final media = MediaQuery.of(context);
+    final screenHeight = media.size.height;
+    final bottomInset = media.padding.bottom;
+    final peek = ((_peekContent + bottomInset) / screenHeight).clamp(0.18, 0.5);
+    final mid = math.max(peek + 0.14, 0.52);
+    const full = 0.93;
+
+    final ordered = _ordered(mapState.markers, query.sort, mapState.selectedId);
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
+      value: AppTheme.overlay,
       child: Scaffold(
-        // Chrome floats over the map; the map must reach the very top of the
-        // screen or it reads as a widget embedded in a page.
-        extendBodyBehindAppBar: true,
         backgroundColor: AppMapStyle.base,
+        // Nothing on this screen takes typing. Resizing for a keyboard that
+        // belongs to the search screen on top shrank the map underneath, and the
+        // search run on the way back used that smaller viewport — dropping lots
+        // near the edge until the next search.
+        resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
-            // ── the map ────────────────────────────────────────────────────
             FlutterMap(
               mapController: _map,
               options: MapOptions(
@@ -267,206 +303,153 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                 maxZoom: AppConfig.mapMaxZoom,
                 backgroundColor: AppMapStyle.base,
                 onMapEvent: _onMapEvent,
-                onTap: (_, __) =>
-                    ref.read(mapControllerProvider.notifier).selectParking(null),
+                onTap: (_, __) => ref.read(mapControllerProvider.notifier).selectParking(null),
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
                 onMapReady: () {
                   setState(() => _mapReady = true);
-                  _searchVisible();
+                  final start = ref.read(locationProvider).position ??
+                      const LatLng(AppConfig.fallbackLat, AppConfig.fallbackLng);
+                  _programmaticMove = true;
+                  _map.move(_centreFor(start, AppConfig.mapDefaultZoom), AppConfig.mapDefaultZoom);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _programmaticMove = false;
+                    _search();
+                  });
                 },
               ),
               children: [
                 const ParqxTileLayer(),
-                // Above the tiles, below the markers — tinting the markers too
-                // would undo the contrast the filter exists to create.
-                const ParqxMapTint(),
                 if (location.hasPosition)
                   MarkerLayer(
                     markers: [
                       Marker(
                         point: location.position!,
-                        width: UserLocationMarker.size,
-                        height: UserLocationMarker.size,
-                        child: const UserLocationMarker(),
+                        width: UserLocationDot.size,
+                        height: UserLocationDot.size,
+                        child: const UserLocationDot(),
                       ),
                     ],
                   ),
-                MarkerLayer(markers: _buildMarkers(results)),
+                MarkerLayer(markers: _buildMarkers(mapState.markers, mapState.selectedId)),
               ],
             ),
 
-            // Darkens the top of the map so chrome stays readable over whatever
-            // happens to be under it, without a hard-edged bar.
-            const Positioned(top: 0, left: 0, right: 0, child: FadeEdge.mapTop()),
+            // Keeps the status bar legible over busy tiles.
+            const Positioned(top: 0, left: 0, right: 0, child: FadeEdge(height: 120, strength: 0.95)),
 
-            // ── floating chrome ────────────────────────────────────────────
-            //
-            // Fades with the sheet: at full extent the sheet covers the map, and
-            // the header was left poking out above its rounded top edge like a
-            // screen that had not finished loading. Pulling the sheet back down
-            // brings it straight back.
-            _FadeWithSheet(
-              controller: _sheet,
-              mid: _mid,
-              full: _full,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: AppSpacing.sm),
-                      _Greeting(
-                        location: location,
-                        // Where the results actually are. Without a GPS fix the
-                        // app still knows what it is showing, and naming that
-                        // is more useful — and more honest — than a warning.
-                        areaLabel: results.isEmpty
-                            ? null
-                            : results.first.location.city ??
-                                results.first.location.locality,
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      ParqxSearchBar(onTap: () => context.push(Routes.search)),
-                      const SizedBox(height: AppSpacing.md),
-                      _ControlRow(
-                        query: query,
-                        activeQuickFilter:
-                            ref.read(discoveryQueryProvider.notifier).activeQuickFilter,
-                        onFilters: _openFilters,
-                        onVehicleChanged: (type) async {
-                          ref.read(discoveryQueryProvider.notifier).setVehicleType(type);
-                          await _searchVisible();
-                        },
-                        onQuickFilter: (filter) async {
-                          ref.read(discoveryQueryProvider.notifier).toggleQuickFilter(filter);
-                          await _searchVisible();
-                        },
-                      ),
-                      if (mapState.showSearchThisArea) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        Center(
-                          child: _SearchThisArea(
-                            isLoading: mapState.isLoading,
-                            onTap: _searchVisible,
-                          ),
-                        ),
-                      ],
-                    ],
+            Positioned(
+              top: media.padding.top + AppSpacing.xs,
+              right: AppSpacing.sm,
+              child: const MapAttribution(),
+            ),
+
+            if (mapState.showSearchThisArea)
+              Positioned(
+                top: media.padding.top + AppSpacing.xxxl,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _SearchThisAreaPill(
+                    isLoading: mapState.isLoading,
+                    onTap: _searchThisArea,
                   ),
                 ),
               ),
-            ),
 
-            // ── map controls, pinned just above the resting sheet ──────────
+            // Controls that ride just above the sheet and fade as it expands.
             AnimatedBuilder(
               animation: _sheet,
               builder: (context, child) {
-                final height = MediaQuery.sizeOf(context).height;
-                final extent = _sheet.isAttached ? _sheet.size : _mid;
-                final sheetTop = extent * height;
-
-                // Fade the map controls out as the sheet takes over the screen.
-                //
-                // They are positioned against the sheet's top edge, so at full
-                // extent they ride up into the floating chrome and collide with
-                // the filter button and the search bar. They are also controls
-                // for a map that is, at that point, almost entirely covered —
-                // so fading them is the honest behaviour as well as the tidy
-                // one. `IgnorePointer` goes with it, or an invisible button
-                // keeps eating taps meant for the search bar.
-                final visibility = (1 - ((extent - _mid) / (_full - _mid))).clamp(0.0, 1.0);
-
-                return Positioned(
-                  right: AppSpacing.lg,
-                  bottom: sheetTop + AppSpacing.md,
-                  child: IgnorePointer(
-                    ignoring: visibility < 0.3,
-                    child: Opacity(opacity: visibility, child: child!),
-                  ),
-                );
-                // NB: kept inline rather than using _FadeWithSheet because this
-                // one also needs `extent` for its POSITION, not only its opacity.
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const MapAttribution(),
-                  const SizedBox(height: AppSpacing.sm),
-                  ParqxRoundControl(
-                    icon: location.hasPosition
-                        ? Icons.my_location_rounded
-                        : Icons.location_searching_rounded,
-                    tooltip: 'Recentre on my location',
-                    active: location.hasPosition,
-                    onTap: _recentre,
-                  ),
-                ],
-              ),
-            ),
-
-            // ── location affordance, bottom-left over the map ──────────────
-            AnimatedBuilder(
-              animation: _sheet,
-              builder: (context, child) {
-                final height = MediaQuery.sizeOf(context).height;
-                final extent = _sheet.isAttached ? _sheet.size : _mid;
-                final visibility =
-                    (1 - ((extent - _mid) / (_full - _mid))).clamp(0.0, 1.0);
+                final extent = _sheet.isAttached ? _sheet.size : mid;
+                final visibility = (1 - ((extent - mid) / (full - mid))).clamp(0.0, 1.0);
                 return Positioned(
                   left: AppSpacing.pageInset,
-                  bottom: extent * height + AppSpacing.md,
+                  right: AppSpacing.pageInset,
+                  bottom: extent * screenHeight + AppSpacing.md,
                   child: IgnorePointer(
                     ignoring: visibility < 0.3,
-                    child: Opacity(opacity: visibility, child: child!),
+                    child: Opacity(opacity: visibility, child: child),
                   ),
                 );
               },
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (!location.hasPosition)
-                    _UseMyLocation(
-                      resolving: location.status == LocationStatus.requesting,
-                      onTap: _recentre,
+                  const Spacer(),
+                  if (location.status == LocationStatus.requesting)
+                    // Finding a fix can take several seconds; without this the
+                    // button looks like it ignored the tap.
+                    Semantics(
+                      label: 'Finding your location',
+                      child: Container(
+                        width: AppSizes.mapControl,
+                        height: AppSizes.mapControl,
+                        decoration: const BoxDecoration(
+                          color: AppColors.surface,
+                          shape: BoxShape.circle,
+                          boxShadow: AppShadows.floating,
+                        ),
+                        padding: const EdgeInsets.all(14),
+                        child: const CircularProgressIndicator(strokeWidth: 2.2),
+                      ),
+                    )
+                  else
+                    CircleButton(
+                      icon: location.hasPosition
+                          ? Icons.my_location_rounded
+                          : Icons.location_searching_rounded,
+                      tooltip: 'Show parking near me',
+                      floating: true,
+                      onPressed: _recentre,
                     ),
-                  if (location.hasPosition)
-                    const ParqxStatusLine(label: 'Showing parking near you')
-                  else if (location.status != LocationStatus.requesting) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    ParqxStatusLine(
-                      label: 'Showing parking in this area',
-                      colour: AppColors.inkMutedDark,
-                    ),
-                  ],
                 ],
               ),
             ),
 
-            // ── results ────────────────────────────────────────────────────
-            _ResultsSheet(
+            _DiscoverySheet(
+              // No key tied to the insets: re-keying rebuilt the sheet around the
+              // same controller before the old sheet let go of it — an assertion
+              // on every frame of the session bar sliding in, or of a keyboard
+              // opening. The sheet adopts new sizes in place.
               controller: _sheet,
-              peek: _peek,
-              mid: _mid,
-              full: _full,
-              results: results,
+              peek: peek,
+              mid: mid,
+              full: full,
+              snapSizes: _snapSizesFor(peek, mid, full),
+              results: ordered,
               isLoading: mapState.isLoading,
               error: mapState.error,
               selectedId: mapState.selectedId,
               truncated: mapState.truncated,
-              hasLocation: location.hasPosition,
+              location: location,
               query: query,
               bottomInset: bottomInset,
-              onRetry: _searchVisible,
-              onSelect: (p) {
-                ref.read(mapControllerProvider.notifier).selectParking(p.id);
-                final position = p.location.latLng;
-                if (position != null) _moveCamera(position, _safeZoom);
+              onScrollController: (c) => _listController = c,
+              onRetry: _search,
+              onOpenSearch: _openSearch,
+              onClearSearch: () {
+                ref.read(discoveryQueryProvider.notifier).setSearchTerm(null);
+                _search();
+              },
+              onOpenFilters: _openFilters,
+              onClearFilters: () {
+                ref.read(discoveryQueryProvider.notifier).clearFilters();
+                _search();
+              },
+              onVehicleChanged: (type) {
+                ref.read(discoveryQueryProvider.notifier).setVehicleType(type);
+                _search();
+              },
+              onQuickFilter: (filter) {
+                ref.read(discoveryQueryProvider.notifier).toggleQuickFilter(filter);
+                _search();
+              },
+              onSort: (sort) => ref.read(discoveryQueryProvider.notifier).setSort(sort),
+              onOpen: (parking) {
+                ref.read(mapControllerProvider.notifier).selectParking(parking.id);
+                context.push(Routes.parkingDetail(parking.id));
               },
             ),
           ],
@@ -475,14 +458,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     );
   }
 
-  /* ── markers ──────────────────────────────────────────────────────────── */
+  /// Results in the chosen order, with the selected place first.
+  ///
+  /// The bounds query does not take a sort, so ordering happens here — on the
+  /// server's own numbers.
+  List<ParkingSummary> _ordered(List<ParkingSummary> items, ParkingSort sort, int? selectedId) {
+    final list = [...items];
+    int bookableFirst(ParkingSummary a, ParkingSummary b) {
+      final ab = a.availability.state.isBookable && a.isOpenNow ? 0 : 1;
+      final bb = b.availability.state.isBookable && b.isOpenNow ? 0 : 1;
+      return ab.compareTo(bb);
+    }
 
-  List<Marker> _buildMarkers(List<ParkingSummary> parkings) {
-    final selectedId = ref.read(mapControllerProvider).selectedId;
+    switch (sort) {
+      case ParkingSort.distance:
+        list.sort((a, b) {
+          final byOpen = bookableFirst(a, b);
+          if (byOpen != 0) return byOpen;
+          return (a.distanceMetres ?? 1 << 30).compareTo(b.distanceMetres ?? 1 << 30);
+        });
+      case ParkingSort.price:
+        list.sort((a, b) {
+          final byOpen = bookableFirst(a, b);
+          if (byOpen != 0) return byOpen;
+          return a.price.hourly.paise.compareTo(b.price.hourly.paise);
+        });
+      case ParkingSort.availability:
+        list.sort((a, b) => b.availability.availableSlots.compareTo(a.availability.availableSlots));
+      case ParkingSort.rating:
+      case ParkingSort.popularity:
+        list.sort(bookableFirst);
+    }
+    if (selectedId != null) {
+      final index = list.indexWhere((p) => p.id == selectedId);
+      if (index > 0) list.insert(0, list.removeAt(index));
+    }
+    return list;
+  }
+
+  /* ── markers ───────────────────────────────────────────────────────────── */
+
+  List<Marker> _buildMarkers(List<ParkingSummary> parkings, int? selectedId) {
     final zoom = _safeZoom;
-
     final clusters = _cluster(parkings, zoom);
-
+    // Selected marker last so it draws above its neighbours.
+    clusters.sort((a, b) {
+      final as = a.items.length == 1 && a.items.first.id == selectedId ? 1 : 0;
+      final bs = b.items.length == 1 && b.items.first.id == selectedId ? 1 : 0;
+      return as.compareTo(bs);
+    });
     return clusters.map((cluster) {
       if (cluster.items.length == 1) {
         final parking = cluster.items.first;
@@ -494,11 +518,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           child: ParkingMapMarker(
             parking: parking,
             isSelected: parking.id == selectedId,
-            onTap: () => _selectParking(parking),
+            onTap: () => _selectFromMap(parking),
           ),
         );
       }
-
       return Marker(
         point: cluster.centre,
         width: ClusterMarker.size,
@@ -506,434 +529,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         child: ClusterMarker(
           count: cluster.items.length,
           hasAvailability: cluster.items.any((p) => p.availability.state.isBookable),
-          // Tapping a cluster zooms into it rather than opening an ambiguous list.
-          onTap: () =>
-              _moveCamera(cluster.centre, (zoom + 2).clamp(3, AppConfig.mapMaxZoom)),
+          onTap: () => _moveCamera(cluster.centre, (zoom + 2).clamp(3, AppConfig.mapMaxZoom)),
         ),
       );
     }).toList(growable: false);
   }
 
-  /// Grid clustering: bucket by rounded coordinate at a resolution derived from
-  /// zoom. Cheap, stable, and good enough for city-scale marker counts.
   List<_Cluster> _cluster(List<ParkingSummary> parkings, double zoom) {
     final withPosition = parkings.where((p) => p.location.hasCoordinates).toList();
-
-    // Above this zoom every lot gets its own pill.
-    if (zoom >= 15 || withPosition.length <= 8) {
+    if (zoom >= 14 || withPosition.length <= 8) {
       return withPosition
           .map((p) => _Cluster(centre: p.location.latLng!, items: [p]))
-          .toList(growable: false);
+          .toList();
     }
-
-    // Cell size halves with each zoom level, so clusters break apart naturally
-    // as the user zooms in. Clamped so the shift can never be negative.
     final shift = (zoom.round().clamp(1, 20) - 8).clamp(0, 12);
     final cellSize = 0.6 / (1 << shift);
-
     final buckets = <String, List<ParkingSummary>>{};
-
     for (final p in withPosition) {
-      final lat = p.location.lat!;
-      final lng = p.location.lng!;
-      final key = '${(lat / cellSize).floor()}:${(lng / cellSize).floor()}';
+      final key = '${(p.location.lat! / cellSize).floor()}:${(p.location.lng! / cellSize).floor()}';
       buckets.putIfAbsent(key, () => []).add(p);
     }
-
     return buckets.values.map((items) {
       final lat = items.map((p) => p.location.lat!).reduce((a, b) => a + b) / items.length;
       final lng = items.map((p) => p.location.lng!).reduce((a, b) => a + b) / items.length;
       return _Cluster(centre: LatLng(lat, lng), items: items);
-    }).toList(growable: false);
-  }
-}
-
-/// Fades a map-layer child out as the results sheet takes over the screen.
-///
-/// One definition, used by both the chrome and the map controls, so they cannot
-/// disappear at different rates and look like a bug.
-class _FadeWithSheet extends StatelessWidget {
-  const _FadeWithSheet({
-    required this.controller,
-    required this.mid,
-    required this.full,
-    required this.child,
-  });
-
-  final DraggableScrollableController controller;
-  final double mid;
-  final double full;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, inner) {
-        final extent = controller.isAttached ? controller.size : mid;
-        final visibility = (1 - ((extent - mid) / (full - mid))).clamp(0.0, 1.0);
-        return IgnorePointer(
-          // Below this the control is too faint to aim at, and an invisible
-          // button that still eats taps is worse than no button.
-          ignoring: visibility < 0.3,
-          child: Opacity(opacity: visibility, child: inner),
-        );
-      },
-      child: child,
-    );
+    }).toList();
   }
 }
 
 class _Cluster {
   const _Cluster({required this.centre, required this.items});
+
   final LatLng centre;
   final List<ParkingSummary> items;
 }
 
-/* ── greeting ──────────────────────────────────────────────────────────────── */
-
-/// Who you are, where you are, and what needs your attention.
-///
-/// The greeting earns its line by carrying the LOCATION with it — the one piece
-/// of context that changes what every result below means. A greeting alone
-/// would be a line of display type spent telling the user something they
-/// already know, which is what it was before.
-class _Greeting extends ConsumerWidget {
-  const _Greeting({required this.location, this.areaLabel});
-
-  final LocationState location;
-  final String? areaLabel;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider);
-    final name = user?.greetingName;
-    final initial = (name?.isNotEmpty == true ? name![0] : '?').toUpperCase();
-
-    return Row(
-      children: [
-        Pressable(
-          onTap: () => context.go(Routes.profile),
-          depth: PressDepth.firm,
-          tint: false,
-          borderRadius: BorderRadius.circular(AppSizes.avatarMd),
-          semanticLabel: 'Your profile',
-          child: Container(
-            width: AppSizes.avatarMd,
-            height: AppSizes.avatarMd,
-            decoration: BoxDecoration(
-              color: AppColors.brandSoftDark,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.brand.withValues(alpha: 0.5)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: context.text.titleMedium?.copyWith(
-                color: AppColors.brandMuted,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                name == null ? _greeting() : '${_greeting()}, $name',
-                style: context.text.titleMedium?.copyWith(color: AppColors.inkDark),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 1),
-              _LocationLine(location: location, areaLabel: areaLabel),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  static String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-}
-
-/// Where the results are coming from — and, when location is off, the way to
-/// fix that.
-///
-/// This replaces a full-width amber card that occupied roughly a fifth of the
-/// screen, permanently, for a condition the user may have chosen deliberately.
-/// Denied location is a SETTING, not an error: the map works, the results are
-/// real, and the only thing missing is distance sorting. So it is one tappable
-/// line under the greeting, in the place a user already looks to find out where
-/// they are.
-class _LocationLine extends ConsumerWidget {
-  const _LocationLine({required this.location, this.areaLabel});
-
-  final LocationState location;
-
-  /// The area the results are actually in, from the nearest result's own
-  /// address. Not a guess about the user.
-  final String? areaLabel;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final resolving = location.status == LocationStatus.requesting;
-    final known = location.hasPosition;
-
-    // What this line says, in order of what is actually true:
-    //
-    //   resolving        "Finding you"
-    //   GPS + area       "Bengaluru"        — near you, and we know where
-    //   GPS, no area     "Near you"
-    //   no GPS + area    "Bengaluru"        — where the MAP is looking. Still
-    //                                         true, and the location icon marks
-    //                                         that it is not a fix.
-    //   no GPS, no area  the real reason    — the only case that needs words.
-    //
-    // The previous version showed "We couldn't get your location" in amber
-    // whenever there was no fix. Denied location is a SETTING, not a failure:
-    // the map works, the results are real, and the only thing missing is
-    // distance sorting. Shouting about it on every frame was the loudest thing
-    // on a screen whose job is to show parking.
-    final String label;
-    if (resolving) {
-      label = 'Finding you';
-    } else if (areaLabel != null) {
-      label = areaLabel!;
-    } else if (known) {
-      label = 'Near you';
-    } else {
-      label = location.message;
-    }
-
-    final unresolved = !known && !resolving;
-
-    return Pressable(
-      enabled: !resolving,
-      depth: PressDepth.firm,
-      tint: false,
-      borderRadius: AppRadius.chip,
-      semanticLabel: known
-          ? 'Showing parking near $label'
-          : '$label. ${location.actionLabel}',
-      onTap: () {
-        final notifier = ref.read(locationProvider.notifier);
-        if (location.needsSystemSettings) {
-          notifier.openSettings();
-        } else {
-          notifier.requestPermission();
-        }
-      },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (resolving)
-            const SizedBox(
-              width: AppSizes.iconXs,
-              height: AppSizes.iconXs,
-              child: CircularProgressIndicator(
-                  strokeWidth: 1.6, color: AppColors.inkMutedDark),
-            )
-          else
-            Icon(
-              known ? Icons.place_rounded : Icons.location_disabled_rounded,
-              size: AppSizes.iconXs + 1,
-              color: known ? AppColors.brandMuted : AppColors.inkMutedDark,
-            ),
-          const SizedBox(width: AppSpacing.xs + 2),
-          Flexible(
-            child: Text(
-              label,
-              style: context.text.bodySmall?.copyWith(
-                color: AppColors.inkSecondaryDark,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 1),
-          Icon(
-            unresolved
-                ? Icons.chevron_right_rounded
-                : Icons.keyboard_arrow_down_rounded,
-            size: AppSizes.iconSm,
-            color: AppColors.inkMutedDark,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/* ── vehicle switch + discovery filters ────────────────────────────────────── */
-
-/// Vehicle on the left, discovery filters on the right, with real space between.
-///
-/// These were adjacent grey chips in one scrolling row separated by a 1px rule,
-/// which made a semantic difference invisible: switching Car→Bike changes the
-/// price, the availability count and the slot inventory of every result on
-/// screen, while a quick filter merely reorders or hides some of them.
-///
-/// One is a segmented switch — a single setting with two positions. The others
-/// are pills that toggle independently. The shapes now say which is which.
-class _ControlRow extends StatelessWidget {
-  const _ControlRow({
-    required this.query,
-    required this.activeQuickFilter,
-    required this.onFilters,
-    required this.onVehicleChanged,
-    required this.onQuickFilter,
-  });
-
-  final ParkingQuery query;
-  final QuickFilter? activeQuickFilter;
-  final VoidCallback onFilters;
-  final ValueChanged<VehicleType> onVehicleChanged;
-  final ValueChanged<QuickFilter> onQuickFilter;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: AppSizes.chipHeight + 4,
-      child: Row(
-        children: [
-          Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              children: [
-                ParqxSegmented<VehicleType>(
-                  value: query.vehicleType,
-                  onChanged: onVehicleChanged,
-                  height: AppSizes.chipHeight,
-                  segmentWidth: 82,
-                  options: const [
-                    ParqxSegment(
-                      value: VehicleType.car,
-                      label: 'Car',
-                      icon: Icons.directions_car_rounded,
-                    ),
-                    ParqxSegment(
-                      value: VehicleType.bike,
-                      label: 'Bike',
-                      icon: Icons.two_wheeler_rounded,
-                    ),
-                  ],
-                ),
-
-                // A real gap, not a divider: the separation is the message.
-                const SizedBox(width: AppSpacing.lg),
-
-                ParqxFilterPill(
-                  label: QuickFilter.nearMe.label,
-                  icon: Icons.near_me_rounded,
-                  selected: activeQuickFilter == QuickFilter.nearMe,
-                  onTap: () => onQuickFilter(QuickFilter.nearMe),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                ParqxFilterPill(
-                  label: QuickFilter.cheapest.label,
-                  icon: Icons.sell_outlined,
-                  selected: activeQuickFilter == QuickFilter.cheapest,
-                  onTap: () => onQuickFilter(QuickFilter.cheapest),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                ParqxFilterPill(
-                  label: QuickFilter.availableNow.label,
-                  icon: Icons.check_circle_outline_rounded,
-                  selected: activeQuickFilter == QuickFilter.availableNow,
-                  onTap: () => onQuickFilter(QuickFilter.availableNow),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          // Pinned outside the scroller: the full filter sheet must be reachable
-          // without scrolling a row of quick filters out of the way first.
-          ParqxRoundControl(
-            icon: Icons.tune_rounded,
-            tooltip: 'All filters',
-            active: query.hasFilters,
-            badge: query.hasFilters,
-            size: AppSizes.chipHeight,
-            onTap: onFilters,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The floating "Use my location" affordance.
-///
-/// Shown only when location is NOT already known — once the map is centred on
-/// the user it would be a button offering to do what has already happened.
-class _UseMyLocation extends StatelessWidget {
-  const _UseMyLocation({required this.resolving, required this.onTap});
-
-  final bool resolving;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Pressable(
-      onTap: resolving ? null : onTap,
-      depth: PressDepth.firm,
-      tint: false,
-      borderRadius: AppRadius.chip,
-      semanticLabel: 'Use my location',
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceAltDark,
-          borderRadius: AppRadius.chip,
-          border: Border.all(color: AppColors.borderDark),
-          boxShadow: AppShadows.floating,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (resolving)
-              const SizedBox(
-                width: AppSizes.iconSm,
-                height: AppSizes.iconSm,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppColors.brandMuted),
-              )
-            else
-              const Icon(Icons.near_me_rounded,
-                  size: AppSizes.iconSm, color: AppColors.brandMuted),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              resolving ? 'Finding you' : 'Use my location',
-              style: context.text.labelMedium?.copyWith(
-                color: AppColors.inkDark,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Offered after the user has panned somewhere new.
-class _SearchThisArea extends StatelessWidget {
-  const _SearchThisArea({required this.isLoading, required this.onTap});
+class _SearchThisAreaPill extends StatelessWidget {
+  const _SearchThisAreaPill({required this.isLoading, required this.onTap});
 
   final bool isLoading;
   final VoidCallback onTap;
@@ -947,377 +579,29 @@ class _SearchThisArea extends StatelessWidget {
       borderRadius: AppRadius.chip,
       semanticLabel: 'Search this area',
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.sm + 2,
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.brand,
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        decoration: const BoxDecoration(
+          color: AppColors.ink,
           borderRadius: AppRadius.chip,
-          boxShadow: AppShadows.brandLift,
+          boxShadow: AppShadows.floating,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (isLoading)
               const SizedBox(
-                width: AppSizes.iconXs,
-                height: AppSizes.iconXs,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrand),
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white),
               )
             else
-              const Icon(Icons.refresh_rounded,
-                  size: AppSizes.iconXs, color: AppColors.onBrand),
+              const Icon(Icons.refresh_rounded, size: 16, color: AppColors.white),
             const SizedBox(width: AppSpacing.sm),
             Text(
               'Search this area',
               style: context.text.labelMedium?.copyWith(
-                color: AppColors.onBrand,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/* ── results sheet ─────────────────────────────────────────────────────────── */
-
-class _ResultsSheet extends ConsumerWidget {
-  const _ResultsSheet({
-    required this.controller,
-    required this.peek,
-    required this.mid,
-    required this.full,
-    required this.results,
-    required this.isLoading,
-    required this.error,
-    required this.selectedId,
-    required this.truncated,
-    required this.hasLocation,
-    required this.query,
-    required this.bottomInset,
-    required this.onRetry,
-    required this.onSelect,
-  });
-
-  final DraggableScrollableController controller;
-  final double peek;
-  final double mid;
-  final double full;
-  final List<ParkingSummary> results;
-  final bool isLoading;
-  final Object? error;
-  final int? selectedId;
-  final bool truncated;
-  final bool hasLocation;
-  final ParkingQuery query;
-  final double bottomInset;
-  final Future<void> Function() onRetry;
-  final ValueChanged<ParkingSummary> onSelect;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return DraggableScrollableSheet(
-      controller: controller,
-      initialChildSize: mid,
-      minChildSize: peek,
-      maxChildSize: full,
-      snap: true,
-      snapSizes: [peek, mid, full],
-      builder: (context, scrollController) {
-        return DecoratedBox(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: AppRadius.sheet,
-            boxShadow: AppShadows.sheet,
-          ),
-          child: ClipRRect(
-            borderRadius: AppRadius.sheet,
-            // Cards scrolling under the floating nav bar were being sliced by
-            // its edge. Fading the last stretch of the sheet to transparent
-            // makes them dissolve instead, so the nav reads as floating above a
-            // continuous surface rather than as a bar laid on top of a list.
-            child: ShaderMask(
-              shaderCallback: (rect) => const LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [Color(0x00FFFFFF), Color(0xFFFFFFFF)],
-                stops: [0.0, 0.075],
-              ).createShader(rect),
-              blendMode: BlendMode.dstIn,
-              child: CustomScrollView(
-                controller: scrollController,
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        const SheetGrabber(),
-                        _SheetHeader(
-                          count: results.length,
-                          isLoading: isLoading,
-                          hasLocation: hasLocation,
-                          truncated: truncated,
-                          // Named from the nearest result's own locality, so
-                          // the sheet says where the results ARE rather than
-                          // where the app guessed the user might be.
-                          areaLabel: results.isEmpty
-                              ? null
-                              : results.first.location.locality ??
-                                  results.first.location.city,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // NB: no active-session card here any more. It was the first
-                  // thing on Home; it is now its own destination, because a
-                  // customer who is already parked is not on this screen to
-                  // discover anything. The Active tab carries a live dot instead.
-
-                  ..._body(context, ref),
-
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: AppSpacing.bottomNavClearance + bottomInset,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  List<Widget> _body(BuildContext context, WidgetRef ref) {
-    if (error != null && results.isEmpty) {
-      return [
-        SliverToBoxAdapter(
-          child: ErrorStateView(
-            error: asApiException(error),
-            onRetry: onRetry,
-            compact: true,
-          ),
-        ),
-      ];
-    }
-
-    if (isLoading && results.isEmpty) {
-      return [
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
-          sliver: SliverList.separated(
-            itemCount: 3,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-            itemBuilder: (_, __) => const ParkingCardSkeleton(),
-          ),
-        ),
-      ];
-    }
-
-    if (results.isEmpty) {
-      return [SliverToBoxAdapter(child: _EmptyResults(query: query))];
-    }
-
-    return [
-      SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
-        sliver: SliverList.separated(
-          itemCount: results.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (context, index) {
-            final parking = results[index];
-            return EntranceFade(
-              index: index,
-              child: ParkingCard(
-                parking: parking,
-                isSelected: parking.id == selectedId,
-                // No Reserve button. The whole card is the target, and the
-                // decision it leads to — which slot, for how long — cannot be
-                // made from a list row anyway.
-                onTap: () {
-                  onSelect(parking);
-                  context.push(Routes.parkingDetail(parking.id));
-                },
-              ),
-            );
-          },
-        ),
-      ),
-    ];
-  }
-}
-
-class _SheetHeader extends ConsumerWidget {
-  const _SheetHeader({
-    required this.count,
-    required this.isLoading,
-    required this.hasLocation,
-    required this.truncated,
-    required this.areaLabel,
-  });
-
-  final int count;
-  final bool isLoading;
-  final bool hasLocation;
-  final bool truncated;
-
-  /// Where the results actually are, from the nearest result's own locality —
-  /// never a hardcoded city.
-  final String? areaLabel;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final String title;
-    if (isLoading && count == 0) {
-      title = 'Looking for parking';
-    } else if (count == 0) {
-      // Deliberately not "No parking here": the empty state directly below says
-      // that, and saying it twice in adjacent blocks reads as a bug.
-      title = 'Parking';
-    } else {
-      title = '$count place${count == 1 ? '' : 's'} to park';
-    }
-
-    final String subtitle;
-    if (count == 0) {
-      subtitle = 'Nothing in the area you are looking at';
-    } else if (truncated) {
-      subtitle = 'Showing the closest — zoom in for more';
-    } else if (areaLabel != null) {
-      subtitle = hasLocation ? 'Near $areaLabel' : 'In $areaLabel';
-    } else {
-      subtitle = hasLocation ? 'Nearest first' : 'In this area';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pageInset,
-        0,
-        AppSpacing.pageInset,
-        AppSpacing.lg,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: context.text.headlineMedium?.copyWith(
-                    color: AppColors.ink,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: context.text.bodySmall?.copyWith(color: AppColors.inkMuted),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          if (isLoading && count > 0)
-            const Padding(
-              padding: EdgeInsets.only(right: AppSpacing.md),
-              child: SizedBox(
-                width: AppSizes.iconSm,
-                height: AppSizes.iconSm,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          if (count > 1) _SortControl(current: ref.watch(discoveryQueryProvider).sort),
-        ],
-      ),
-    );
-  }
-}
-
-/// Reorders the results.
-///
-/// Only rendered when there is more than one result — a sort control over a
-/// single row is a control that cannot do anything.
-///
-/// The options are the server's own `ParkingSort` values, so the ordering is
-/// computed where the data is rather than re-sorted in Dart against a field the
-/// client may not have (distance, for one, does not exist without location).
-class _SortControl extends ConsumerWidget {
-  const _SortControl({required this.current});
-
-  final ParkingSort current;
-
-  static const _offered = [
-    ParkingSort.distance,
-    ParkingSort.price,
-    ParkingSort.availability,
-  ];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasLocation = ref.watch(locationProvider).hasPosition;
-
-    return PopupMenuButton<ParkingSort>(
-      initialValue: current,
-      tooltip: 'Sort results',
-      position: PopupMenuPosition.under,
-      color: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.field),
-      onSelected: (sort) {
-        Haptics.selection();
-        ref.read(discoveryQueryProvider.notifier).setSort(sort);
-      },
-      itemBuilder: (context) => [
-        for (final sort in _offered)
-          PopupMenuItem(
-            value: sort,
-            // Sorting by distance needs a position to measure from. Offering it
-            // without one would produce an order the server cannot honour.
-            enabled: sort != ParkingSort.distance || hasLocation,
-            child: Row(
-              children: [
-                Icon(
-                  sort == current ? Icons.check_rounded : null,
-                  size: AppSizes.iconSm,
-                  color: AppColors.brand,
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  sort.label,
-                  style: context.text.bodyMedium?.copyWith(
-                    color: sort == ParkingSort.distance && !hasLocation
-                        ? AppColors.inkSubtle
-                        : AppColors.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceAlt,
-          borderRadius: AppRadius.chip,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.swap_vert_rounded,
-                size: AppSizes.iconSm, color: AppColors.inkSecondary),
-            const SizedBox(width: AppSpacing.xs + 2),
-            Text(
-              'Sort',
-              style: context.text.labelMedium?.copyWith(
-                color: AppColors.inkSecondary,
+                color: AppColors.white,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1328,35 +612,443 @@ class _SortControl extends ConsumerWidget {
   }
 }
 
-class _EmptyResults extends ConsumerWidget {
-  const _EmptyResults({required this.query});
+/* ── the sheet ─────────────────────────────────────────────────────────────── */
 
+class _DiscoverySheet extends StatelessWidget {
+  const _DiscoverySheet({
+    required this.controller,
+    required this.peek,
+    required this.mid,
+    required this.full,
+    required this.snapSizes,
+    required this.results,
+    required this.isLoading,
+    required this.error,
+    required this.selectedId,
+    required this.truncated,
+    required this.location,
+    required this.query,
+    required this.bottomInset,
+    required this.onScrollController,
+    required this.onRetry,
+    required this.onOpenSearch,
+    required this.onClearSearch,
+    required this.onOpenFilters,
+    required this.onClearFilters,
+    required this.onVehicleChanged,
+    required this.onQuickFilter,
+    required this.onSort,
+    required this.onOpen,
+  });
+
+  final DraggableScrollableController controller;
+  final double peek;
+  final double mid;
+  final double full;
+  final List<double> snapSizes;
+  final List<ParkingSummary> results;
+  final bool isLoading;
+  final ApiException? error;
+  final int? selectedId;
+  final bool truncated;
+  final LocationState location;
   final ParkingQuery query;
+  final double bottomInset;
+  final ValueChanged<ScrollController> onScrollController;
+  final Future<void> Function() onRetry;
+  final VoidCallback onOpenSearch;
+  final VoidCallback onClearSearch;
+  final VoidCallback onOpenFilters;
+  final VoidCallback onClearFilters;
+  final ValueChanged<VehicleType> onVehicleChanged;
+  final ValueChanged<QuickFilter> onQuickFilter;
+  final ValueChanged<ParkingSort> onSort;
+  final ValueChanged<ParkingSummary> onOpen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // With filters applied, the actionable next step is removing them — not
-    // searching somewhere else.
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      controller: controller,
+      initialChildSize: mid,
+      minChildSize: peek,
+      maxChildSize: full,
+      snap: true,
+      snapSizes: snapSizes,
+      builder: (context, scrollController) {
+        onScrollController(scrollController);
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppRadius.sheet,
+            boxShadow: AppShadows.sheet,
+          ),
+          child: ClipRRect(
+            borderRadius: AppRadius.sheet,
+            child: CustomScrollView(
+              controller: scrollController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SheetGrabber(),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.pageInset,
+                          AppSpacing.xs,
+                          AppSpacing.pageInset,
+                          AppSpacing.md,
+                        ),
+                        child: SearchPill(
+                          term: query.searchTerm,
+                          onTap: onOpenSearch,
+                          onClear: onClearSearch,
+                        ),
+                      ),
+                      _ChipsRow(
+                        query: query,
+                        hasLocation: location.hasPosition,
+                        onOpenFilters: onOpenFilters,
+                        onVehicleChanged: onVehicleChanged,
+                        onQuickFilter: onQuickFilter,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      _ResultsHeader(
+                        count: results.length,
+                        isLoading: isLoading,
+                        truncated: truncated,
+                        searchTerm: query.searchTerm,
+                        hasLocation: location.hasPosition,
+                        sort: query.sort,
+                        onSort: onSort,
+                        areaLabel: results.isEmpty
+                            ? null
+                            : results.first.location.locality ?? results.first.location.city,
+                      ),
+                    ],
+                  ),
+                ),
+                ..._body(context),
+                SliverToBoxAdapter(child: SizedBox(height: bottomInset + AppSpacing.xl)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _body(BuildContext context) {
+    if (error != null && results.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: ErrorStateView(error: error!, onRetry: onRetry, compact: true),
+        ),
+      ];
+    }
+    if (isLoading && results.isEmpty) {
+      return [
+        SliverList.builder(itemCount: 3, itemBuilder: (_, __) => const ParkingCardSkeleton()),
+      ];
+    }
+    if (results.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: _EmptyResults(
+            query: query,
+            onClearSearch: onClearSearch,
+            onClearFilters: onClearFilters,
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        sliver: SliverList.separated(
+          itemCount: results.length,
+          separatorBuilder: (_, index) => Padding(
+            padding: const EdgeInsets.only(left: 94, right: AppSpacing.pageInset),
+            child: (results[index].id == selectedId || results[index + 1].id == selectedId)
+                ? const SizedBox(height: 1)
+                : const Hairline(),
+          ),
+          itemBuilder: (context, index) {
+            final parking = results[index];
+            return EntranceFade(
+              key: ValueKey(parking.id),
+              index: index,
+              offset: 6,
+              child: ParkingCard(
+                parking: parking,
+                isSelected: parking.id == selectedId,
+                onTap: () => onOpen(parking),
+              ),
+            );
+          },
+        ),
+      ),
+    ];
+  }
+}
+
+class _ChipsRow extends StatelessWidget {
+  const _ChipsRow({
+    required this.query,
+    required this.hasLocation,
+    required this.onOpenFilters,
+    required this.onVehicleChanged,
+    required this.onQuickFilter,
+  });
+
+  final ParkingQuery query;
+  final bool hasLocation;
+  final VoidCallback onOpenFilters;
+  final ValueChanged<VehicleType> onVehicleChanged;
+  final ValueChanged<QuickFilter> onQuickFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final active = ref.read(discoveryQueryProvider.notifier).activeQuickFilter;
+        final quick = [
+          if (hasLocation) (QuickFilter.nearMe, Icons.near_me_outlined),
+          (QuickFilter.availableNow, Icons.check_circle_outline_rounded),
+          (QuickFilter.cheapest, Icons.sell_outlined),
+          (QuickFilter.open24x7, Icons.schedule_rounded),
+        ];
+        return SizedBox(
+          height: AppSizes.chipHeight + 4,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
+            children: [
+              Segmented<VehicleType>(
+                value: query.vehicleType,
+                onChanged: onVehicleChanged,
+                segmentWidth: 76,
+                semanticLabel: 'Vehicle type',
+                options: const [
+                  SegmentOption(
+                    value: VehicleType.car,
+                    label: 'Car',
+                    icon: Icons.directions_car_filled_rounded,
+                  ),
+                  SegmentOption(
+                    value: VehicleType.bike,
+                    label: 'Bike',
+                    icon: Icons.two_wheeler_rounded,
+                  ),
+                ],
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Center(
+                child: AppFilterChip(
+                  label: 'Filters',
+                  icon: Icons.tune_rounded,
+                  selected: query.hasFilters,
+                  badgeCount: query.activeFilterCount,
+                  onTap: onOpenFilters,
+                ),
+              ),
+              for (final (filter, icon) in quick) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Center(
+                  child: AppFilterChip(
+                    label: filter.label,
+                    icon: icon,
+                    selected: active == filter,
+                    onTap: () => onQuickFilter(filter),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ResultsHeader extends StatelessWidget {
+  const _ResultsHeader({
+    required this.count,
+    required this.isLoading,
+    required this.truncated,
+    required this.searchTerm,
+    required this.hasLocation,
+    required this.sort,
+    required this.onSort,
+    required this.areaLabel,
+  });
+
+  final int count;
+  final bool isLoading;
+  final bool truncated;
+  final String? searchTerm;
+  final bool hasLocation;
+  final ParkingSort sort;
+  final ValueChanged<ParkingSort> onSort;
+  final String? areaLabel;
+
+  static const _offered = [ParkingSort.distance, ParkingSort.price, ParkingSort.availability];
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTerm = searchTerm != null && searchTerm!.trim().isNotEmpty;
+    final String title;
+    if (isLoading && count == 0) {
+      title = 'Finding parking';
+    } else if (count == 0) {
+      title = 'No parking here';
+    } else if (hasTerm) {
+      title = '$count result${count == 1 ? '' : 's'}';
+    } else {
+      title = '$count place${count == 1 ? '' : 's'} to park';
+    }
+
+    final String? subtitle;
+    if (count == 0) {
+      subtitle = null;
+    } else if (hasTerm) {
+      subtitle = 'For "${searchTerm!.trim()}"';
+    } else if (truncated) {
+      subtitle = 'Showing the closest. Zoom in for more.';
+    } else if (areaLabel != null) {
+      subtitle = hasLocation ? 'Near $areaLabel' : 'Around $areaLabel';
+    } else {
+      subtitle = null;
+    }
+
+    final effectiveSort = !hasLocation && sort == ParkingSort.distance ? null : sort;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.pageInset, 0, AppSpacing.sm, AppSpacing.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: context.text.headlineSmall),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: context.text.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (isLoading && count > 0)
+            const Padding(
+              padding: EdgeInsets.only(right: AppSpacing.sm),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          if (count > 1)
+            PopupMenuButton<ParkingSort>(
+              tooltip: 'Sort',
+              initialValue: effectiveSort,
+              position: PopupMenuPosition.under,
+              onSelected: (value) {
+                Haptics.selection();
+                onSort(value);
+              },
+              itemBuilder: (context) => [
+                for (final option in _offered)
+                  if (option != ParkingSort.distance || hasLocation)
+                    PopupMenuItem(
+                      value: option,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            child: option == effectiveSort
+                                ? const Icon(Icons.check_rounded, size: 18)
+                                : null,
+                          ),
+                          Text(option.label),
+                        ],
+                      ),
+                    ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.sm,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.swap_vert_rounded, size: 18, color: AppColors.ink),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      effectiveSort?.label ?? 'Sort',
+                      style: context.text.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyResults extends StatelessWidget {
+  const _EmptyResults({
+    required this.query,
+    required this.onClearSearch,
+    required this.onClearFilters,
+  });
+
+  final ParkingQuery query;
+  final VoidCallback onClearSearch;
+  final VoidCallback onClearFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    if (query.searchTerm != null && query.searchTerm!.trim().isNotEmpty) {
+      return EmptyStateView(
+        icon: Icons.search_off_rounded,
+        title: 'Nothing for "${query.searchTerm!.trim()}"',
+        message: 'Try an area or landmark nearby, or clear the search to browse the map.',
+        compact: true,
+        action: PillButton(
+          label: 'Clear search',
+          icon: Icons.close_rounded,
+          onPressed: onClearSearch,
+        ),
+      );
+    }
     if (query.hasFilters) {
       return EmptyStateView(
         icon: Icons.filter_alt_off_outlined,
         title: 'No matches here',
-        message: 'No parking in this area matches all '
-            '${query.activeFilterCount} '
-            'filter${query.activeFilterCount == 1 ? '' : 's'}.',
+        message: 'Nothing in this area matches your '
+            '${query.activeFilterCount} filter${query.activeFilterCount == 1 ? '' : 's'}.',
         compact: true,
-        action: TextButton.icon(
-          onPressed: () => ref.read(discoveryQueryProvider.notifier).clearFilters(),
-          icon: const Icon(Icons.filter_alt_off_rounded, size: AppSizes.iconSm),
-          label: const Text('Clear filters'),
+        action: PillButton(
+          label: 'Clear filters',
+          icon: Icons.close_rounded,
+          onPressed: onClearFilters,
         ),
       );
     }
-
     return const EmptyStateView(
       icon: Icons.travel_explore_rounded,
       title: 'Try another area',
-      message: 'Move the map, or search for a place to see parking there.',
+      message: 'Move the map or search for a place to see parking there.',
       compact: true,
     );
   }

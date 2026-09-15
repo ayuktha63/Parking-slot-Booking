@@ -1,19 +1,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// REVIEW & PAY
+// CONFIRM AND PAY
 //
-// The last screen before money moves, and therefore the one that has to be exactly
-// truthful.
+// The held spot, the time, the vehicle and the exact price — then Pay.
 //
-// Every figure shown is a line from the server's quote — the same quote stored on
-// the hold, which is the same one the payment order is created from. There is no
-// arithmetic in this file. The old app displayed a hardcoded "₹30/hr", charged
-// Razorpay 100 paise, and rendered "$5.00" on the success screen; three different
-// numbers for one transaction, none of them related.
+// Pay does two real things in order: it creates the booking (consuming the
+// hold), then asks the payment controller to take the money. Both answers come
+// from the server; this screen never declares success on its own.
+//
+// Two traps this screen is built around:
+//   · A successful booking CONSUMES the hold, so the live hold becomes null the
+//     moment the booking exists. The screen keeps rendering from a snapshot —
+//     otherwise it would announce an expired hold over a real booking.
+//   · If payment then fails, the booking still exists. The pay bar says so, and
+//     offers to try again or to open the booking, instead of implying the spot
+//     was lost.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -21,16 +27,21 @@ import 'package:intl/intl.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/providers/booking_providers.dart';
 import '../../../core/providers/core_providers.dart';
+import '../../../core/providers/discovery_providers.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.dart';
-import 'journey_progress.dart';
+import '../../../core/theme/typography.dart';
 import '../../../shared/models/booking.dart';
 import '../../../shared/models/money.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/common.dart';
+import '../../../shared/widgets/interaction.dart';
+import '../../../shared/widgets/parqx_photo.dart';
 import '../../../shared/widgets/states.dart';
+import '../../../shared/widgets/surfaces.dart';
+import '../../auth/presentation/profile_setup_screen.dart' show UpperCaseTextFormatter;
 import '../data/booking_repository.dart';
 import 'hold_countdown_bar.dart';
 
@@ -42,34 +53,35 @@ class BookingReviewScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
-  /// Generated once for this attempt and reused across retries, so a booking
-  /// created on a request whose response was lost is returned rather than
-  /// duplicated.
+  /// One key per attempt: a double tap cannot create two bookings.
   final String _idempotencyKey = newIdempotencyKey();
 
   final TextEditingController _plateController = TextEditingController();
-
   int? _selectedVehicleId;
   bool _useNewPlate = false;
+
   bool _isSubmitting = false;
   String? _plateError;
 
-  /// The booking, once created. Held so a failed payment can be retried against
-  /// the same booking instead of starting over.
+  /// Set once the booking exists; retries pay for this booking.
   Booking? _booking;
 
-  /// The hold as it was at the moment the booking consumed it.
-  ///
-  /// Not stale data being passed off as live: once a booking exists these
-  /// values are FIXED — the slot, window and quote were settled by the server
-  /// when it created the booking, and no longer depend on a countdown.
+  /// The hold as it was when the booking consumed it. See the header.
   SlotHold? _consumedHold;
+
+  /// Set when this screen hands over to the confirmation, so the payment result
+  /// and the server's booking update cannot both navigate.
+  bool _leaving = false;
+
+  void _showConfirmed(Booking booking) {
+    if (_leaving || !mounted) return;
+    _leaving = true;
+    context.pushReplacement(Routes.bookingConfirmation(booking.id), extra: booking);
+  }
 
   @override
   void initState() {
     super.initState();
-    // Preselect the customer's default vehicle for this type — the plate does not
-    // need retyping on every booking, which was one of the old flow's worst steps.
     final hold = ref.read(holdControllerProvider).hold;
     final vehicles = ref.read(userVehiclesProvider);
     final match = _defaultFor(vehicles, hold?.slot.vehicleType.wire);
@@ -100,95 +112,108 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
     final payment = ref.watch(paymentControllerProvider);
     final vehicles = ref.watch(userVehiclesProvider);
 
-    // Payment confirmed: leave for the confirmation screen. `go` rather than
-    // `push`, so Back cannot return to a review of an already-paid booking.
+    // Payment confirmed by the server: replace this screen, so Back cannot
+    // return to paying for a booking that is already paid.
     ref.listen(paymentControllerProvider, (previous, next) {
-      if (next.stage == PaymentStage.confirmed && next.booking != null && mounted) {
-        context.pushReplacement(Routes.bookingConfirmation, extra: next.booking);
-      }
+      final booking = next.booking;
+      if (next.stage == PaymentStage.confirmed && booking != null) _showConfirmed(booking);
     });
 
-    // The hold lapsed. The slot is gone; there is nothing to review.
+    // The server can confirm a booking this screen last saw fail — a payment
+    // that completed after the app stopped waiting, reported by webhook. Its
+    // word wins: without this the screen kept offering "Try again" on a booking
+    // that was already paid.
+    final saved = _booking;
+    if (saved != null) {
+      ref.listen(bookingDetailProvider(saved.id), (previous, next) {
+        final fresh = next.valueOrNull;
+        if (fresh != null && fresh.status == BookingStatus.confirmed) _showConfirmed(fresh);
+      });
+    }
+
+    // The hold lapsed before a booking existed: nothing is left to review.
     ref.listen(holdControllerProvider, (previous, next) {
-      if (next.expiredJustNow && mounted && _booking == null) {
-        _onHoldExpired();
-      }
+      if (next.expiredJustNow && mounted && _booking == null) _onHoldExpired();
     });
 
-    // ── the consumed-hold trap ────────────────────────────────────────
-    //
-    // A SUCCESSFUL booking consumes the hold, so `holdState.hold` becomes null
-    // the instant `POST /bookings` returns 201 — correctly, because there is no
-    // longer a live hold: it became a booking.
-    //
-    // This screen used to read that null and render "Your hold expired. Pick a
-    // slot again." while the booking existed and the payment was in flight.
-    // Following that advice would have created a SECOND booking for the same
-    // customer. The listener below already guarded on `_booking == null`; this
-    // branch did not.
-    //
-    // After consumption the screen keeps rendering from the snapshot, because
-    // the thing on screen is no longer a hold — it is the booking being paid
-    // for, and its details have not changed.
     final hold = holdState.hold ?? _consumedHold;
 
     if (hold == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Review')),
-        body: _HoldGoneView(onPickAgain: () => context.pop()),
+        appBar: AppBar(),
+        body: EmptyStateView(
+          title: 'Your hold ran out',
+          message: 'The spot was released so someone else could book it. '
+              'Pick a spot again — it may still be free.',
+          icon: Icons.timer_off_outlined,
+          action: PrimaryButton(
+            label: 'Pick a spot',
+            expand: false,
+            onPressed: () => context.pop(),
+          ),
+        ),
       );
     }
 
+    final failed = payment.stage == PaymentStage.failed;
+    final place = ref.watch(parkingDetailProvider(hold.parkingAreaId)).valueOrNull;
+    final photo = place?.summary.coverPhotoUrl ??
+        (place != null && place.photos.isNotEmpty ? place.photos.first.url : null);
+
     return Scaffold(
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Review your booking'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(9),
-          child: JourneyProgress(
-            step: payment.isBusy ? BookingStep.pay : BookingStep.review,
-          ),
-        ),
+        title: const Text('Confirm and pay'),
         actions: [
-          // Only while a hold is what is keeping the slot. After the booking
-          // exists the slot is held by the BOOKING, and a ticking countdown
-          // beside it would say the opposite — that the customer is about to
-          // lose something they have already secured.
+          // Only while a HOLD keeps the spot. Once the booking exists the booking
+          // keeps it, and a ticking timer would suggest the opposite.
           if (_booking == null)
             Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.lg),
+              padding: const EdgeInsets.only(right: AppSpacing.pageInset),
               child: Center(child: HoldCountdownPill(state: holdState)),
             ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.pageInset,
-          AppSpacing.lg,
-          AppSpacing.pageInset,
-          AppSpacing.xxxl,
-        ),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
         children: [
           if (holdState.isExpiring && _booking == null)
             Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pageInset,
+                AppSpacing.sm,
+                AppSpacing.pageInset,
+                AppSpacing.sm,
+              ),
               child: InlineBanner(
-                message: 'Your slot is released in ${holdState.countdownLabel}. '
-                    'Complete payment to keep it.',
+                message: 'Your spot is released in ${holdState.countdownLabel}. Pay now to keep it.',
                 tone: BannerTone.warning,
-                actionLabel: hold.canExtend ? 'Hold longer' : null,
+                actionLabel: hold.canExtend ? 'Hold it longer' : null,
                 onAction: hold.canExtend
                     ? () => ref.read(holdControllerProvider.notifier).extend()
                     : null,
               ),
             ),
-
-          _ParkingBlock(hold: hold),
-          const SizedBox(height: AppSpacing.xl),
-
-          _ReservationBlock(hold: hold),
-          const SizedBox(height: AppSpacing.xl),
-
-          _VehicleBlock(
+          _PlaceHeader(hold: hold, photoUrl: photo),
+          const Hairline(indent: AppSpacing.pageInset, endIndent: AppSpacing.pageInset),
+          const _SectionTitle('Your parking'),
+          _WhenRows(hold: hold),
+          const Hairline(indent: AppSpacing.pageInset, endIndent: AppSpacing.pageInset),
+          const _SectionTitle('Vehicle'),
+          if (_booking != null)
+            // The booking exists, so its vehicle is settled; showing the chooser
+            // (now also listing the plate just saved to the account) would read
+            // as two vehicles.
+            ListRow(
+              icon: _booking!.vehicle.type.wire == 'bike'
+                  ? Icons.two_wheeler_rounded
+                  : Icons.directions_car_filled_rounded,
+              title: _booking!.vehicle.displayPlate ?? _booking!.vehicle.type.label,
+              subtitle: 'On this booking',
+              trailing: const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.inkTertiary),
+            )
+          else
+          _VehicleChooser(
             vehicles: vehicles
                 .where((v) => v.vehicleType.wire == hold.slot.vehicleType.wire)
                 .toList(growable: false),
@@ -196,6 +221,7 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
             useNewPlate: _useNewPlate,
             plateController: _plateController,
             plateError: _plateError,
+            locked: _booking != null,
             onSelectVehicle: (id) => setState(() {
               _selectedVehicleId = id;
               _useNewPlate = false;
@@ -206,39 +232,45 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
               _selectedVehicleId = null;
             }),
           ),
-          const SizedBox(height: AppSpacing.xl),
-
-          if (hold.quote != null)
-            _PriceBlock(quote: hold.quote!)
-          else
-            // The hold carries no snapshot (it was extended, which reissues without
-            // one). Rather than showing a price we have not been given, say where
-            // the number will come from.
-            const InlineBanner(
-              message: 'The exact amount is confirmed when payment starts.',
-              tone: BannerTone.info,
-            ),
-
+          const Hairline(indent: AppSpacing.pageInset, endIndent: AppSpacing.pageInset),
+          const _SectionTitle('Price'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
+            child: hold.quote != null
+                ? _PriceBreakdown(quote: hold.quote!)
+                : const InlineBanner(message: 'The exact amount is confirmed when payment starts.'),
+          ),
           const SizedBox(height: AppSpacing.lg),
-          const _PolicyNote(),
-
-          if (payment.stage == PaymentStage.failed) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
+            child: Text(
+              'Staying past your booked time is charged at this place\'s overstay rate. '
+              'If you cancel, the refund depends on how close to arrival you cancel — '
+              'you see the exact amount before confirming.',
+              style: context.text.bodySmall,
+            ),
+          ),
+          if (failed && _booking == null) ...[
             const SizedBox(height: AppSpacing.lg),
-            InlineBanner(
-              message: payment.message ??
-                  payment.error?.message ??
-                  'The payment did not complete. You can try again.',
-              tone: BannerTone.danger,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
+              child: InlineBanner(
+                message: payment.message ??
+                    payment.error?.message ??
+                    'The payment did not complete. You can try again.',
+                tone: BannerTone.danger,
+              ),
             ),
           ],
         ],
       ),
       bottomNavigationBar: _PayBar(
-        failed: payment.stage == PaymentStage.failed,
+        failed: failed,
+        failureMessage: payment.message ?? payment.error?.message,
         bookingExists: _booking != null,
         onViewBooking: _booking == null
             ? null
-            : () => context.pushReplacement(Routes.bookingDetail(_booking!.id)),
+            : () => openBookingAfterFlow(context, _booking!.id),
         total: hold.quote?.total,
         isBusy: _isSubmitting || payment.isBusy,
         stageLabel: _stageLabel(payment.stage),
@@ -254,7 +286,6 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
       case PaymentStage.atGateway:
         return 'Complete the payment';
       case PaymentStage.verifying:
-        // Deliberately not "Payment successful" — it has not been verified yet.
         return 'Confirming with your bank…';
       case PaymentStage.idle:
       case PaymentStage.confirmed:
@@ -263,13 +294,11 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
     }
   }
 
-  /* ── submit ──────────────────────────────────────────────────────────── */
+  /* ── submit ────────────────────────────────────────────────────────────── */
 
   Future<void> _submit() async {
-    // Once the booking exists the hold is gone by design — it was consumed
-    // creating it. A retry after a failed payment must therefore NOT require a
-    // live hold, or the second tap of "Try again" reports a hold expiry that
-    // did not happen and strands a real, payable booking.
+    // Once the booking exists the hold is gone by design; a retry must not
+    // require a live hold.
     final hold = ref.read(holdControllerProvider).hold ?? _consumedHold;
     if (hold == null) {
       _onHoldExpired();
@@ -277,20 +306,19 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
     }
 
     final plate = _plateController.text.trim().toUpperCase().replaceAll(' ', '');
-    if (_useNewPlate && plate.length < 4) {
+    if (_booking == null && _useNewPlate && plate.length < 4) {
       setState(() => _plateError = 'Enter your vehicle number');
       return;
     }
 
+    FocusScope.of(context).unfocus();
     setState(() {
       _isSubmitting = true;
       _plateError = null;
     });
 
-    // Step 1: create the booking, if this is the first attempt. A retry after a
-    // failed payment reuses the booking that already exists.
+    // Step 1: the booking — unless a previous attempt already created it.
     var booking = _booking;
-
     if (booking == null) {
       try {
         booking = await ref.read(bookingRepositoryProvider).createBooking(
@@ -302,16 +330,12 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
         if (!mounted) return;
         setState(() => _booking = booking);
 
-        // The hold is now a booking; the countdown must stop without releasing
-        // the slot, which the booking holds instead.
-        //
-        // Snapshot first: `consumed()` nulls the controller's hold, and this
-        // screen still needs its slot, window and quote to render the thing the
-        // customer is paying for.
+        // Snapshot first: consuming nulls the controller's hold, and this screen
+        // still needs its spot, window and quote.
         _consumedHold = hold;
         ref.read(holdControllerProvider.notifier).consumed();
 
-        // The customer may have added a vehicle by typing a plate.
+        // A typed plate was saved as a vehicle; refresh the account's list.
         if (_useNewPlate) {
           unawaited(ref.read(authControllerProvider.notifier).refreshProfile());
         }
@@ -326,76 +350,86 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
-    // Step 2: pay. The controller owns order → gateway → verify and reports only
-    // what the server concluded.
+    // Step 2: pay. The controller reports only what the server concluded.
     await ref.read(paymentControllerProvider.notifier).pay(booking: booking);
   }
 
   void _showError(ApiException e) {
-    // A lost slot is not a generic failure — it needs a different offer.
-    final lostSlot = e.code == 'SLOT_UNAVAILABLE' ||
+    final lostSpot = e.code == 'SLOT_UNAVAILABLE' ||
         e.code == 'SLOT_HELD_BY_ANOTHER' ||
         e.code == 'TIME_OVERLAP' ||
         e.code == 'HOLD_EXPIRED';
-
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(e.message),
         duration: const Duration(seconds: 4),
-        action: lostSlot
+        action: lostSpot
             ? SnackBarAction(label: 'Pick another', onPressed: () => context.pop())
             : null,
       ));
   }
 
   void _onHoldExpired() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(
-        content: Text('Your hold expired and the slot was released.'),
-      ));
+    showToast(context, 'Your hold ran out and the spot was released.');
     if (context.canPop()) context.pop();
   }
 }
 
-/* ── blocks ────────────────────────────────────────────────────────────────── */
+/* ── sections ──────────────────────────────────────────────────────────────── */
 
-class _ParkingBlock extends StatelessWidget {
-  const _ParkingBlock({required this.hold});
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title);
 
-  final SlotHold hold;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pageInset,
+        AppSpacing.xl,
+        AppSpacing.pageInset,
+        AppSpacing.xs,
+      ),
+      child: Text(title, style: context.text.headlineSmall),
+    );
+  }
+}
+
+class _PlaceHeader extends StatelessWidget {
+  const _PlaceHeader({required this.hold, required this.photoUrl});
+
+  final SlotHold hold;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pageInset,
+        AppSpacing.md,
+        AppSpacing.pageInset,
+        AppSpacing.xl,
+      ),
       child: Row(
         children: [
-          Container(
-            width: AppSizes.avatarMd,
-            height: AppSizes.avatarMd,
-            decoration: const BoxDecoration(
-              color: AppColors.brandSoft,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.local_parking_rounded,
-                size: AppSizes.iconMd, color: AppColors.brandStrong),
-          ),
-          const SizedBox(width: AppSpacing.md),
+          ParqxPhoto(url: photoUrl, seed: hold.parkingName ?? 'Parking', width: 64, height: 64),
+          const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   hold.parkingName ?? 'Parking',
-                  style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  style: context.text.headlineSmall,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Slot ${hold.slot.code}',
-                  style: context.text.bodyMedium?.copyWith(color: AppColors.brandStrong),
+                  '${hold.slot.vehicleType.label} · Spot ${hold.slot.code}',
+                  style: context.text.bodyMedium,
                 ),
               ],
             ),
@@ -406,8 +440,8 @@ class _ParkingBlock extends StatelessWidget {
   }
 }
 
-class _ReservationBlock extends StatelessWidget {
-  const _ReservationBlock({required this.hold});
+class _WhenRows extends StatelessWidget {
+  const _WhenRows({required this.hold});
 
   final SlotHold hold;
 
@@ -415,46 +449,41 @@ class _ReservationBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final start = hold.entryTime;
     final end = start.add(Duration(minutes: hold.durationMinutes));
+    final now = DateTime.now();
+    final isToday = start.year == now.year && start.month == now.month && start.day == now.day;
     final sameDay = start.day == end.day && start.month == end.month;
+    final day = isToday ? 'Today' : DateFormat('EEE d MMM').format(start);
+    final range = sameDay
+        ? '${DateFormat('h:mm a').format(start)} – ${DateFormat('h:mm a').format(end)}'
+        : '${DateFormat('h:mm a').format(start)} – ${DateFormat('EEE h:mm a').format(end)}';
+    final row = hold.slot.rowLabel ??
+        (RegExp(r'^[A-Za-z]').hasMatch(hold.slot.code) ? hold.slot.code[0].toUpperCase() : null);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'Your reservation', padding: EdgeInsets.zero),
-        const SizedBox(height: AppSpacing.md),
-        AppCard(
-          child: Column(
-            children: [
-              DetailRow(
-                label: 'Arriving',
-                value: DateFormat('EEE d MMM, h:mm a').format(start),
-                icon: Icons.login_rounded,
-              ),
-              DetailRow(
-                label: 'Leaving',
-                value: sameDay
-                    ? DateFormat('h:mm a').format(end)
-                    : DateFormat('EEE d MMM, h:mm a').format(end),
-                icon: Icons.logout_rounded,
-              ),
-              DetailRow(
-                label: 'Duration',
-                value: _durationLabel(hold.durationMinutes),
-                icon: Icons.schedule_rounded,
-              ),
-              DetailRow(
-                label: 'Slot',
-                value: hold.slot.code,
-                icon: Icons.grid_view_rounded,
-              ),
-            ],
-          ),
+        ListRow(
+          icon: Icons.schedule_rounded,
+          title: '$day, $range',
+          subtitle: _duration(hold.durationMinutes),
+        ),
+        ListRow(
+          icon: Icons.local_parking_rounded,
+          title: 'Spot ${hold.slot.code}',
+          subtitle: [if (row != null) 'Row $row', _classLabel(hold.slot.slotClass)].join(' · '),
         ),
       ],
     );
   }
 
-  static String _durationLabel(int minutes) {
+  static String _classLabel(String slotClass) => switch (slotClass) {
+        'ev' => 'EV charging',
+        'accessible' => 'Accessible',
+        'compact' => 'Compact',
+        'valet' => 'Valet',
+        _ => 'Standard spot',
+      };
+
+  static String _duration(int minutes) {
     if (minutes % 60 == 0) {
       final h = minutes ~/ 60;
       return '$h hour${h == 1 ? '' : 's'}';
@@ -464,13 +493,14 @@ class _ReservationBlock extends StatelessWidget {
   }
 }
 
-class _VehicleBlock extends StatelessWidget {
-  const _VehicleBlock({
+class _VehicleChooser extends StatelessWidget {
+  const _VehicleChooser({
     required this.vehicles,
     required this.selectedVehicleId,
     required this.useNewPlate,
     required this.plateController,
     required this.plateError,
+    required this.locked,
     required this.onSelectVehicle,
     required this.onUseNewPlate,
   });
@@ -480,235 +510,142 @@ class _VehicleBlock extends StatelessWidget {
   final bool useNewPlate;
   final TextEditingController plateController;
   final String? plateError;
+
+  /// After the booking exists its vehicle is fixed.
+  final bool locked;
+
   final ValueChanged<int> onSelectVehicle;
   final VoidCallback onUseNewPlate;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'Vehicle', padding: EdgeInsets.zero),
-        const SizedBox(height: AppSpacing.md),
-
         for (final vehicle in vehicles)
+          _Choice(
+            icon: vehicle.vehicleType.wire == 'bike'
+                ? Icons.two_wheeler_rounded
+                : Icons.directions_car_filled_rounded,
+            title: vehicle.displayPlate,
+            subtitle: vehicle.label ?? (vehicle.isDefault ? 'Default vehicle' : vehicle.vehicleType.label),
+            selected: !useNewPlate && selectedVehicleId == vehicle.id,
+            onTap: locked ? null : () => onSelectVehicle(vehicle.id),
+          ),
+        _Choice(
+          icon: Icons.add_rounded,
+          title: vehicles.isEmpty ? 'Enter your vehicle number' : 'Use another vehicle',
+          subtitle: 'Saved to your account for next time',
+          selected: useNewPlate,
+          onTap: locked ? null : onUseNewPlate,
+        ),
+        if (useNewPlate)
           Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: _VehicleOption(
-              title: vehicle.numberPlate,
-              subtitle: vehicle.label ?? (vehicle.isDefault ? 'Default' : null),
-              icon: vehicle.vehicleType.wire == 'bike'
-                  ? Icons.two_wheeler_rounded
-                  : Icons.directions_car_rounded,
-              selected: !useNewPlate && selectedVehicleId == vehicle.id,
-              onTap: () => onSelectVehicle(vehicle.id),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pageInset,
+              AppSpacing.xs,
+              AppSpacing.pageInset,
+              AppSpacing.md,
+            ),
+            child: AppTextField(
+              controller: plateController,
+              hint: 'e.g. KA 01 AB 1234',
+              enabled: !locked,
+              errorText: plateError,
+              textCapitalization: TextCapitalization.characters,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9 \-]')),
+                UpperCaseTextFormatter(),
+              ],
+              prefixIcon: Icons.badge_outlined,
+              maxLength: 16,
+              style: AppTypography.code(size: 16, spacing: 1),
             ),
           ),
-
-        _VehicleOption(
-          title: vehicles.isEmpty ? 'Enter your vehicle number' : 'Use a different vehicle',
-          subtitle: vehicles.isEmpty ? null : 'It will be saved for next time',
-          icon: Icons.add_rounded,
-          selected: useNewPlate,
-          onTap: onUseNewPlate,
-        ),
-
-        if (useNewPlate) ...[
-          const SizedBox(height: AppSpacing.md),
-          AppTextField(
-            label: 'Vehicle number',
-            controller: plateController,
-            hint: 'KA01AB1234',
-            errorText: plateError,
-            textCapitalization: TextCapitalization.characters,
-            prefixIcon: Icons.badge_outlined,
-            maxLength: 16,
-          ),
-        ],
       ],
     );
   }
 }
 
-class _VehicleOption extends StatelessWidget {
-  const _VehicleOption({
-    required this.title,
-    this.subtitle,
+class _Choice extends StatelessWidget {
+  const _Choice({
     required this.icon,
+    required this.title,
+    required this.subtitle,
     required this.selected,
     required this.onTap,
   });
 
-  final String title;
-  final String? subtitle;
   final IconData icon;
+  final String title;
+  final String subtitle;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: AppRadius.field,
-        child: AnimatedContainer(
-          duration: AppMotion.instant,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.brandSoft : context.colors.surface,
-            border: Border.all(
-              color: selected ? AppColors.brand : context.colors.outline,
-              width: selected ? 2 : 1,
-            ),
-            borderRadius: AppRadius.field,
-          ),
-          child: Row(
-            children: [
-              Icon(icon,
-                  size: AppSizes.iconMd,
-                  color: selected ? AppColors.brandStrong : context.colors.onSurfaceVariant),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(title,
-                        style: context.text.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: selected ? AppColors.brandStrong : context.colors.onSurface,
-                        )),
-                    if (subtitle != null)
-                      Text(subtitle!,
-                          style: context.text.bodySmall
-                              ?.copyWith(color: context.colors.onSurfaceVariant)),
-                  ],
-                ),
+    return Pressable(
+      onTap: onTap,
+      feedback: PressFeedback.selection,
+      depth: PressDepth.subtle,
+      borderRadius: BorderRadius.zero,
+      semanticLabel: '$title, $subtitle${selected ? ', selected' : ''}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset, vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            IconDisc(icon: icon),
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: context.text.titleMedium),
+                  Text(subtitle, style: context.text.bodyMedium),
+                ],
               ),
-              if (selected)
-                const Icon(Icons.check_circle_rounded,
-                    size: AppSizes.iconMd, color: AppColors.brand),
-            ],
-          ),
+            ),
+            Icon(
+              selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+              color: selected ? AppColors.ink : AppColors.inkDisabled,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// The price, line by line.
-///
-/// Only the lines that exist are drawn: a lot with no platform fee shows no
-/// platform fee row, rather than "₹0".
-class _PriceBlock extends StatelessWidget {
-  const _PriceBlock({required this.quote});
+class _PriceBreakdown extends StatelessWidget {
+  const _PriceBreakdown({required this.quote});
 
   final PriceQuoteLite quote;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(title: 'Price', padding: EdgeInsets.zero),
-        const SizedBox(height: AppSpacing.md),
-        AppCard(
-          child: Column(
-            children: [
-              DetailRow(
-                label: '${quote.hourly.display}/hr × ${quote.billedHours} '
-                    'hour${quote.billedHours == 1 ? '' : 's'}',
-                value: quote.subtotal.display,
-              ),
-
-              if (quote.isSurge)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.trending_up_rounded,
-                          size: AppSizes.iconXs, color: AppColors.warning),
-                      const SizedBox(width: AppSpacing.xs),
-                      Expanded(
-                        child: Text(
-                          'Higher demand right now (×${quote.multiplier.toStringAsFixed(2)})',
-                          style:
-                              context.text.bodySmall?.copyWith(color: AppColors.warning),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              if (quote.hasPlatformFee)
-                DetailRow(label: 'Platform fee', value: quote.platformFee.display),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                child: Divider(height: 1, color: context.colors.outline),
-              ),
-
-              DetailRow(
-                label: 'Total',
-                value: quote.total.display,
-                emphasise: true,
-              ),
-            ],
-          ),
+        InfoRow(
+          label: '${quote.hourly.display}/hr × ${quote.billedHours} '
+              'hour${quote.billedHours == 1 ? '' : 's'}',
+          value: quote.subtotal.display,
         ),
+        if (quote.isSurge)
+          InfoRow(
+            label: 'Busy-time pricing ×${quote.multiplier.toStringAsFixed(2)}',
+            value: 'Included',
+            labelColor: AppColors.warning,
+          ),
+        if (quote.hasPlatformFee) InfoRow(label: 'Service fee', value: quote.platformFee.display),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          child: Hairline(),
+        ),
+        InfoRow(label: 'Total', value: quote.total.display, emphasise: true),
       ],
     );
   }
 }
 
-class _PolicyNote extends StatelessWidget {
-  const _PolicyNote();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(Icons.info_outline_rounded,
-            size: AppSizes.iconSm, color: context.colors.onSurfaceVariant),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            'Staying longer than booked is charged at the parking area’s overstay rate. '
-            'Cancellation refunds depend on how close to your arrival time you cancel — '
-            'the exact amount is shown before you confirm.',
-            style: context.text.bodySmall?.copyWith(color: context.colors.onSurfaceVariant),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The action bar, which reports the real state of the transaction.
-///
-/// ─────────────────────────────────────────────────────────────────────────
-/// WHY THIS IS STATE-AWARE
-///
-/// When `POST /payments/order` fails, TWO things are true at once and the user
-/// needs both:
-///
-///   1. The payment did not start.
-///   2. A booking WAS created, and it is saved.
-///
-/// The failure used to be reported by a banner below the price card — off
-/// screen on a 360px phone — while this bar went on showing an unchanged "Pay"
-/// button. So the customer tapped Pay, watched nothing happen, and had no way
-/// to know a real booking now existed in their account.
-///
-/// The bar is where the eye is and where the action is, so the state belongs
-/// here. Once a booking exists the offer changes from "Pay" to "Try again",
-/// and a second route out appears — because a customer who cannot pay right now
-/// must still be able to leave without abandoning a booking they do not know
-/// they have.
-/// ─────────────────────────────────────────────────────────────────────────
 class _PayBar extends StatelessWidget {
   const _PayBar({
     required this.total,
@@ -716,6 +653,7 @@ class _PayBar extends StatelessWidget {
     required this.stageLabel,
     required this.onPay,
     this.failed = false,
+    this.failureMessage,
     this.bookingExists = false,
     this.onViewBooking,
   });
@@ -724,115 +662,56 @@ class _PayBar extends StatelessWidget {
   final bool isBusy;
   final String? stageLabel;
   final VoidCallback onPay;
-
-  /// The last payment attempt did not complete.
   final bool failed;
-
-  /// A booking has been created and is held as pending payment.
+  final String? failureMessage;
   final bool bookingExists;
-
   final VoidCallback? onViewBooking;
 
   @override
   Widget build(BuildContext context) {
-    final showRecovery = failed && bookingExists;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceDark,
-        border: Border(top: BorderSide(color: AppColors.borderDark)),
-        boxShadow: AppShadows.sheet,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    final recovering = failed && bookingExists;
+    return BottomActionBar(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (recovering) ...[
+            InlineBanner(
+              title: 'Booking saved — payment didn\'t go through',
+              message: '${failureMessage ?? 'The payment did not complete.'} '
+                  'Your spot stays reserved while the payment window is open.',
+              tone: BannerTone.warning,
+              icon: Icons.bookmark_added_outlined,
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+          Row(
             children: [
-              if (showRecovery) ...[
-                // Stated where it cannot be missed: the booking is real.
-                Row(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.bookmark_added_outlined,
-                        size: AppSizes.iconSm, color: AppColors.warningBright),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Your booking is saved and waiting for payment. '
-                        'The slot is yours until then.',
-                        style: context.text.bodySmall
-                            ?.copyWith(color: AppColors.warningBright),
-                      ),
+                    Text(stageLabel ?? 'Total', style: context.text.bodyMedium),
+                    Text(
+                      total?.display ?? '—',
+                      style: AppTypography.numeric(size: 22, weight: FontWeight.w700),
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          stageLabel ?? 'Total',
-                          style: context.text.bodySmall
-                              ?.copyWith(color: AppColors.inkMutedDark),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          total?.display ?? 'Confirmed at payment',
-                          style: context.text.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.lg),
-                  SizedBox(
-                    width: 160,
-                    child: PrimaryButton(
-                      label: showRecovery ? 'Try again' : 'Pay',
-                      icon: showRecovery ? Icons.refresh_rounded : Icons.lock_rounded,
-                      isLoading: isBusy,
-                      onPressed: isBusy ? null : onPay,
-                    ),
-                  ),
-                ],
               ),
-              if (showRecovery && onViewBooking != null) ...[
-                const SizedBox(height: AppSpacing.xs),
-                // The way out that does not abandon the booking.
-                TertiaryButton(
-                  label: 'View booking instead',
-                  onPressed: onViewBooking,
-                ),
-              ],
+              const SizedBox(width: AppSpacing.md),
+              PrimaryButton(
+                label: recovering ? 'Try again' : (total == null ? 'Pay' : 'Pay ${total!.display}'),
+                icon: recovering ? Icons.refresh_rounded : Icons.lock_outline_rounded,
+                expand: false,
+                isLoading: isBusy,
+                onPressed: isBusy ? null : onPay,
+              ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HoldGoneView extends StatelessWidget {
-  const _HoldGoneView({required this.onPickAgain});
-
-  final VoidCallback onPickAgain;
-
-  @override
-  Widget build(BuildContext context) {
-    return EmptyStateView(
-      title: 'Your hold expired',
-      message: 'The slot was released so someone else could book it. '
-          'Pick a slot again — it may still be free.',
-      icon: Icons.timer_off_outlined,
-      action: SizedBox(
-        width: 220,
-        child: PrimaryButton(label: 'Pick a slot', onPressed: onPickAgain),
+          if (recovering && onViewBooking != null)
+            TertiaryButton(label: 'View booking', onPressed: onViewBooking),
+        ],
       ),
     );
   }

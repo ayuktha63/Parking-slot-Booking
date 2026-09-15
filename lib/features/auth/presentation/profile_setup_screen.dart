@@ -1,15 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// FIRST RUN — NAME AND VEHICLE
+// SIGN IN — NAME
 //
-// Shown once, only when the account has no real name yet.
-//
-// This is the step the old flow got backwards: registration collected a name and
-// then sent the user BACK to the login screen to retype their phone number, so
-// anyone who signed in before registering ended up permanently named "User" — and
-// could never change it, because Edit Name called an endpoint that did not exist.
-//
-// The vehicle is optional here. A user who skips it is asked for a plate once, at
-// booking time, and can save it then.
+// Step 3, first sign-in only. A name (operators see it on their arrivals board)
+// and, optionally, the vehicle — which saves typing a plate at every booking.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -20,9 +13,10 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/providers/core_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.dart';
-import '../../../shared/models/parking.dart' show VehicleType;
+import '../../../shared/models/parking.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/common.dart';
+import '../../../shared/widgets/parqx_controls.dart';
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -43,10 +37,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController.addListener(() {
-      if (_nameError != null) setState(() => _nameError = null);
-      setState(() {});
-    });
+    _nameController.addListener(() => setState(() => _nameError = null));
+    _plateController.addListener(() => setState(() {}));
   }
 
   @override
@@ -58,23 +50,20 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
   bool get _canSubmit => _nameController.text.trim().length >= 2;
 
-  Future<void> _submit({required bool withVehicle}) async {
+  Future<void> _submit() async {
     if (!_canSubmit || _submitting) return;
-
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;
       _error = null;
     });
-
     try {
       final plate = _plateController.text.trim();
       await ref.read(authControllerProvider.notifier).completeProfile(
             name: _nameController.text.trim(),
-            vehicleType: withVehicle && plate.isNotEmpty ? _vehicleType.wire : null,
-            numberPlate: withVehicle && plate.isNotEmpty ? plate : null,
+            vehicleType: plate.isNotEmpty ? _vehicleType.wire : null,
+            numberPlate: plate.isNotEmpty ? plate : null,
           );
-      // The router redirects to Home once the profile is complete.
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -92,117 +81,107 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasPlate = _plateController.text.trim().isNotEmpty;
     return Scaffold(
+      backgroundColor: AppColors.surface,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: AppSpacing.huge),
-              Text('Nice to meet you', style: context.text.displayMedium),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'Just a name, so we know what to call you.',
-                style: context.text.bodyMedium,
-              ),
-              const SizedBox(height: AppSpacing.xxxl),
-
-              AppTextField(
-                label: 'Your name',
-                controller: _nameController,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                textInputAction: TextInputAction.next,
-                errorText: _nameError,
-                maxLength: 60,
-              ),
-
-              const SizedBox(height: AppSpacing.xxl),
-
-              Text('Add a vehicle', style: context.text.titleLarge),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Optional — it saves typing your number plate later.',
-                style: context.text.bodySmall,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              Row(
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pageInset,
+                  AppSpacing.huge,
+                  AppSpacing.pageInset,
+                  AppSpacing.lg,
+                ),
                 children: [
-                  for (final type in VehicleType.values) ...[
-                    if (type != VehicleType.values.first) const SizedBox(width: AppSpacing.sm),
-                    AppFilterChip(
-                      label: type.label,
-                      icon: type == VehicleType.car
-                          ? Icons.directions_car_rounded
-                          : Icons.two_wheeler_rounded,
-                      selected: _vehicleType == type,
-                      onTap: () => setState(() => _vehicleType = type),
-                    ),
+                  Text("What's your name?", style: context.text.displaySmall),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Parking operators see it when you arrive.',
+                    style: context.text.bodyLarge?.copyWith(color: AppColors.inkSecondary),
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  AppTextField(
+                    controller: _nameController,
+                    hint: 'Full name',
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.name],
+                    errorText: _nameError,
+                    maxLength: 60,
+                  ),
+                  const SizedBox(height: AppSpacing.huge),
+                  Text('Your vehicle', style: context.text.headlineSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Optional. Saves typing your number plate every time you book.',
+                    style: context.text.bodyMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Segmented<VehicleType>(
+                    value: _vehicleType,
+                    semanticLabel: 'Vehicle type',
+                    onChanged: (type) => setState(() => _vehicleType = type),
+                    options: const [
+                      SegmentOption(
+                        value: VehicleType.car,
+                        label: 'Car',
+                        icon: Icons.directions_car_filled_rounded,
+                      ),
+                      SegmentOption(
+                        value: VehicleType.bike,
+                        label: 'Bike',
+                        icon: Icons.two_wheeler_rounded,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AppTextField(
+                    controller: _plateController,
+                    hint: 'Number plate, e.g. KA 01 AB 1234',
+                    textCapitalization: TextCapitalization.characters,
+                    textInputAction: TextInputAction.done,
+                    maxLength: 16,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9 \-]')),
+                      UpperCaseTextFormatter(),
+                    ],
+                    onSubmitted: (_) => _submit(),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    InlineBanner(message: _error!.message, tone: BannerTone.danger),
                   ],
                 ],
               ),
-
-              const SizedBox(height: AppSpacing.lg),
-
-              AppTextField(
-                label: 'Number plate',
-                controller: _plateController,
-                hint: 'KL 01 AB 1234',
-                textCapitalization: TextCapitalization.characters,
-                textInputAction: TextInputAction.done,
-                maxLength: 16,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9 \-]')),
-                  UpperCaseTextFormatter(),
-                ],
-                onSubmitted: (_) => _submit(withVehicle: true),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pageInset,
+                AppSpacing.sm,
+                AppSpacing.pageInset,
+                AppSpacing.lg,
               ),
-
-              if (_error != null) ...[
-                const SizedBox(height: AppSpacing.lg),
-                InlineBanner(
-                  message: _error!.message,
-                  icon: Icons.error_outline_rounded,
-                  tone: BannerTone.danger,
-                ),
-              ],
-
-              const SizedBox(height: AppSpacing.xxl),
-
-              PrimaryButton(
-                label: 'Start parking',
+              child: PrimaryButton(
+                label: hasPlate ? 'Save and continue' : 'Continue without a vehicle',
+                trailingIcon: Icons.arrow_forward_rounded,
                 isLoading: _submitting,
-                onPressed: _canSubmit ? () => _submit(withVehicle: true) : null,
+                onPressed: _canSubmit ? _submit : null,
               ),
-
-              const SizedBox(height: AppSpacing.sm),
-
-              Center(
-                child: TertiaryButton(
-                  label: 'Skip the vehicle for now',
-                  onPressed:
-                      _canSubmit && !_submitting ? () => _submit(withVehicle: false) : null,
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.xxl),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Plates are stored and compared uppercase.
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    return TextEditingValue(
-      text: newValue.text.toUpperCase(),
-      selection: newValue.selection,
-    );
+    return TextEditingValue(text: newValue.text.toUpperCase(), selection: newValue.selection);
   }
 }

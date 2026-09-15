@@ -1,113 +1,59 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// MAP CANVAS — the product's signature surface
+// MAP CANVAS
 //
-// PARQX renders OpenStreetMap tiles through a colour matrix that turns them into
-// a near-monochrome, violet-black basemap. Same tiles, same attribution, same
-// zero-API-key arrangement — art-directed.
-//
-// WHY THIS IS WORTH DOING
-//   A stock OSM basemap is beige roads, green parks, blue water, pink motorways
-//   and black labels. It is excellent cartography and terrible product surface:
-//   every price marker placed on it becomes one more coloured object in an
-//   already crowded field, and the user's eye has to search for the thing the
-//   whole screen exists to show. Darkened and desaturated, the basemap recedes
-//   to context, and the availability markers become the only saturated objects
-//   on screen — which is the entire job of a parking app's map.
-//
-//   It is also the single most recognisable thing about the product. Two parking
-//   apps showing the same OSM tiles look like the same app. This one does not.
-//
-// HOW
-//   One `ColorFiltered` wrapping the whole tile layer, not flutter_map's
-//   per-tile `tileBuilder`. Per-tile filtering allocates a saveLayer for every
-//   tile on screen — sixteen or more during a pan — where this allocates one for
-//   the layer. On a mid-range Android device that difference is visible in the
-//   frame graph while panning.
-//
-//   A dark base colour sits underneath so the gap before tiles arrive is part of
-//   the design rather than a white flash, and a low-opacity violet wash sits on
-//   top to seat the map in the brand.
+// A quiet light basemap — grey land, white roads, soft labels — so that the
+// price markers and your location are the only strong things on it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 
-/// The styled basemap. Use as the first child of every `FlutterMap` in the app,
-/// so the map looks identical on Home, Explore and the detail preview.
 class ParqxTileLayer extends StatelessWidget {
   const ParqxTileLayer({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final layer = TileLayer(
+      urlTemplate: AppConfig.mapTileUrl,
+      subdomains: AppConfig.mapTileSubdomains,
+      userAgentPackageName: AppConfig.mapUserAgentPackageName,
+      maxZoom: AppConfig.mapMaxZoom,
+      // Only providers that serve real @2x tiles; simulating retina would
+      // quadruple requests to a volunteer-run tile server.
+      retinaMode: AppConfig.mapTileUrl.contains('{r}') && RetinaMode.isHighDensity(context),
+      panBuffer: 1,
+      tileDisplay: const TileDisplay.fadeIn(duration: AppMotion.quick, startOpacity: 0),
+    );
+    if (!AppConfig.mapUsesDefaultTiles) return layer;
     return ColorFiltered(
-      colorFilter: const ColorFilter.matrix(AppMapStyle.desaturateDarken),
-      child: TileLayer(
-        urlTemplate: AppConfig.mapTileUrl,
-        userAgentPackageName: AppConfig.mapUserAgentPackageName,
-        maxZoom: AppConfig.mapMaxZoom,
-        // Keeps tiles from being re-fetched while panning back and forth.
-        panBuffer: 1,
-        // NB: the pre-tile background colour lives on `MapOptions.backgroundColor`
-        // in flutter_map 6+, not here. Every FlutterMap in the app sets it to
-        // `AppMapStyle.base` so the instant before tiles paint is part of the
-        // design rather than a flash of white.
-        tileDisplay: const TileDisplay.fadeIn(
-          duration: AppMotion.normal,
-          startOpacity: 0,
-        ),
-      ),
+      colorFilter: const ColorFilter.matrix(AppMapStyle.silver),
+      child: layer,
     );
   }
 }
 
-/// The violet wash painted over the filtered tiles.
-///
-/// Separate from [ParqxTileLayer] because it must sit ABOVE the tiles but BELOW
-/// the markers — tinting the markers too would undo the contrast the filter was
-/// applied to create.
-class ParqxMapTint extends StatelessWidget {
-  const ParqxMapTint({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: AppMapStyle.tint),
-        child: SizedBox.expand(),
-      ),
-    );
-  }
-}
-
-/// OpenStreetMap attribution.
-///
-/// Required by the OSM tile usage policy, and not negotiable regardless of how
-/// the tiles are styled — restyling is not authorship. Styled to sit quietly on
-/// the dark map rather than removed or hidden.
 class MapAttribution extends StatelessWidget {
-  const MapAttribution({super.key, this.alignment = Alignment.bottomLeft});
-
-  final Alignment alignment;
+  const MapAttribution({super.key});
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
         decoration: BoxDecoration(
-          color: AppColors.mapOverlayInk.withValues(alpha: 0.55),
+          color: AppColors.white.withValues(alpha: 0.8),
           borderRadius: AppRadius.chip,
         ),
         child: Text(
           AppConfig.mapAttribution,
           style: context.text.labelSmall?.copyWith(
-            color: AppColors.onMapMuted,
+            color: AppColors.inkSecondary,
             fontSize: 9.5,
-            letterSpacing: 0.1,
           ),
         ),
       ),
@@ -115,15 +61,11 @@ class MapAttribution extends StatelessWidget {
   }
 }
 
-/// The user's own position on the dark map.
-///
-/// A brand-violet core inside a soft halo, with a white ring so it stays visible
-/// over both dark road fill and light water. Deliberately NOT the same shape
-/// language as a parking marker: this is where you are, not somewhere you can go.
+/// You are here: a blue dot with a white ring and a soft halo.
 class UserLocationDot extends StatelessWidget {
   const UserLocationDot({super.key});
 
-  static const double size = 26;
+  static const double size = 40;
 
   @override
   Widget build(BuildContext context) {
@@ -131,18 +73,132 @@ class UserLocationDot extends StatelessWidget {
       label: 'Your location',
       child: Center(
         child: Container(
-          width: 16,
-          height: 16,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
-            color: AppColors.brand,
+            color: AppColors.accent.withValues(alpha: 0.14),
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.white, width: 2.5),
-            boxShadow: const [
-              BoxShadow(color: Color(0x665B34E8), blurRadius: 12, spreadRadius: 2),
-            ],
+          ),
+          alignment: Alignment.center,
+          child: Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.white, width: 3),
+              boxShadow: const [
+                BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 2)),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A destination pin: a black circle with a white P on a short stem.
+class ParkingPin extends StatelessWidget {
+  const ParkingPin({super.key});
+
+  static const double width = 40;
+  static const double height = 52;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Column(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.ink,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.white, width: 3),
+              boxShadow: AppShadows.floating,
+            ),
+            alignment: Alignment.center,
+            child: const Text(
+              'P',
+              style: TextStyle(
+                fontFamily: 'InterDisplay',
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.white,
+                height: 1,
+              ),
+            ),
+          ),
+          Container(width: 3, height: 12, color: AppColors.ink),
+        ],
+      ),
+    );
+  }
+}
+
+/// A non-interactive map centred on one place. Used as the header of booking
+/// and session screens, where "where is it" is the first question.
+class StaticPlaceMap extends StatelessWidget {
+  const StaticPlaceMap({
+    super.key,
+    required this.position,
+    this.zoom = 16,
+    this.showAttribution = true,
+    this.lift = 0,
+  });
+
+  final LatLng position;
+  final double zoom;
+  final bool showAttribution;
+
+  /// Raises the pin this many logical pixels above the centre of the visible
+  /// box, so content overlapping the bottom of the map does not cover it. Done
+  /// by extending the map above the clip — the pin still marks the true point.
+  final double lift;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      clipBehavior: Clip.hardEdge,
+      children: [
+        Positioned(
+          left: 0,
+          right: 0,
+          top: -2 * lift,
+          bottom: 0,
+          child: IgnorePointer(
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: position,
+                initialZoom: zoom,
+                backgroundColor: AppMapStyle.base,
+                interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+              ),
+              children: [
+                const ParqxTileLayer(),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: position,
+                      width: ParkingPin.width,
+                      height: ParkingPin.height,
+                      alignment: Alignment.topCenter,
+                      child: const ParkingPin(),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (showAttribution)
+          const Positioned(right: AppSpacing.sm, bottom: AppSpacing.sm, child: MapAttribution()),
+      ],
     );
   }
 }

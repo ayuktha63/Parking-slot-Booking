@@ -20,7 +20,6 @@ import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../config/app_config.dart';
-import '../storage/token_storage.dart';
 
 /// A slot changed state in a lot we are watching.
 @immutable
@@ -101,10 +100,13 @@ class ParkingConfigChangedEvent {
   final String change;
 }
 
-class RealtimeService {
-  RealtimeService(this._tokens);
+/// Returns a currently valid access token, refreshing the session if needed.
+typedef AccessTokenProvider = Future<String?> Function();
 
-  final TokenStorage _tokens;
+class RealtimeService {
+  RealtimeService(this._accessToken);
+
+  final AccessTokenProvider _accessToken;
 
   io.Socket? _socket;
 
@@ -113,12 +115,25 @@ class RealtimeService {
   final _holdExpiries = StreamController<HoldExpiredEvent>.broadcast();
   final _configChanges = StreamController<ParkingConfigChangedEvent>.broadcast();
   final _connection = StreamController<bool>.broadcast();
+  final _resyncs = StreamController<void>.broadcast();
+
+  /// Set after the first successful connection, so a later connect is known to
+  /// be a RE-connect.
+  bool _connectedBefore = false;
 
   Stream<SlotUpdateEvent> get slotUpdates => _slotUpdates.stream;
   Stream<BookingUpdateEvent> get bookingUpdates => _bookingUpdates.stream;
   Stream<HoldExpiredEvent> get holdExpiries => _holdExpiries.stream;
   Stream<ParkingConfigChangedEvent> get configChanges => _configChanges.stream;
   Stream<bool> get connectionState => _connection.stream;
+
+  /// Fires when the socket comes back after being disconnected.
+  ///
+  /// Events sent while the app was offline — a server restart, a tunnel, a
+  /// phone switching networks — are simply gone; socket.io does not replay
+  /// them. Anything showing server state must refetch when this fires, or the
+  /// operator's check-in that happened during the gap never reaches the screen.
+  Stream<void> get resyncs => _resyncs.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -128,10 +143,10 @@ class RealtimeService {
   Future<void> connect() async {
     if (_socket != null) return;
 
-    // The handshake carries the access token. The server joins the private user
-    // room from the verified claims — a client cannot ask to join someone else's.
-    final token = _tokens.accessToken;
-
+    // The handshake carries the access token, fetched fresh on EVERY connect
+    // attempt. A token captured once at startup is expired fifteen minutes later;
+    // the server then accepts the reconnect as anonymous, never joins the user
+    // room, and booking events stop arriving with no visible error.
     final socket = io.io(
       AppConfig.socketUrl,
       io.OptionBuilder()
@@ -140,12 +155,19 @@ class RealtimeService {
           .setReconnectionAttempts(8)
           .setReconnectionDelay(1000)
           .setReconnectionDelayMax(10000)
-          .setAuth(token == null ? <String, dynamic>{} : {'token': token})
+          .setAuthFn((callback) {
+            _accessToken().then(
+              (token) => callback(token == null ? <String, dynamic>{} : {'token': token}),
+              onError: (Object _) => callback(<String, dynamic>{}),
+            );
+          })
           .build(),
     );
 
     socket.onConnect((_) {
       _connection.add(true);
+      if (_connectedBefore) _resyncs.add(null);
+      _connectedBefore = true;
       // Re-subscribe: a reconnect starts with no rooms, and silently not being in
       // one looks exactly like "nothing is happening".
       final pending = _subscription;
@@ -242,5 +264,6 @@ class RealtimeService {
     await _holdExpiries.close();
     await _configChanges.close();
     await _connection.close();
+    await _resyncs.close();
   }
 }

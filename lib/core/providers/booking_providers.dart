@@ -47,7 +47,7 @@ final checkoutServiceProvider = Provider<CheckoutService>((ref) {
 /// Connected once the user is signed in and reconnected when that changes, because
 /// the private rooms the server grants depend on the token in the handshake.
 final realtimeServiceProvider = Provider<RealtimeService>((ref) {
-  final service = RealtimeService(ref.watch(tokenStorageProvider));
+  final service = RealtimeService(ref.watch(apiClientProvider).freshAccessToken);
 
   ref.listen<AuthState>(authControllerProvider, (previous, next) {
     if (previous?.status == next.status) return;
@@ -800,14 +800,32 @@ final parkingConfigSyncProvider = Provider<void>((ref) {
 /// happen without the app asking. Without this the customer sits looking at a
 /// stale screen until they pull to refresh.
 final bookingRealtimeSyncProvider = Provider<void>((ref) {
-  final subscription =
-      ref.watch(realtimeServiceProvider).bookingUpdates.listen((event) {
-    ref.invalidate(bookingDetailProvider(event.bookingId));
+  final realtime = ref.watch(realtimeServiceProvider);
+
+  void refreshLists() {
     ref.invalidate(bookingCountsProvider);
     ref.invalidate(currentBookingProvider);
     for (final bucket in BookingBucket.values) {
       ref.invalidate(bookingListProvider(bucket));
     }
+  }
+
+  final updates = realtime.bookingUpdates.listen((event) {
+    ref.invalidate(bookingDetailProvider(event.bookingId));
+    refreshLists();
   });
-  ref.onDispose(subscription.cancel);
+
+  // After a reconnect nothing says what changed during the gap, so everything
+  // that shows server state is refetched: every open booking, the lists, and
+  // any live floor plan.
+  final resyncs = realtime.resyncs.listen((_) {
+    ref.invalidate(bookingDetailProvider);
+    ref.invalidate(slotLayoutProvider);
+    refreshLists();
+  });
+
+  ref.onDispose(() {
+    updates.cancel();
+    resyncs.cancel();
+  });
 });

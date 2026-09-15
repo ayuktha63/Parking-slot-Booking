@@ -1,12 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CANCEL
 //
-// The customer is told exactly what they get back BEFORE they confirm.
-//
-// The figure comes from /bookings/:id/cancellation-preview, which applies the same
-// refund slabs the cancellation itself will. The old flow showed "Booking
-// Cancelled" and never mentioned money at any point — and deleted the row, so there
-// was nothing to look back at either.
+// Shows the server's cancellation preview — exactly what comes back and what
+// does not — before anything is cancelled. Nothing here computes a refund.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -20,18 +16,12 @@ import '../../../shared/models/booking.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/common.dart';
 import '../../../shared/widgets/states.dart';
+import '../../../shared/widgets/surfaces.dart';
 
-/// Shows the sheet. Returns true when the booking was cancelled.
-Future<bool> showCancelBookingSheet(
-  BuildContext context,
-  WidgetRef ref,
-  Booking booking,
-) async {
-  final result = await showModalBottomSheet<bool>(
+Future<bool> showCancelBookingSheet(BuildContext context, WidgetRef ref, Booking booking) async {
+  final result = await showAppSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => _CancelBookingSheet(booking: booking),
+    child: _CancelBookingSheet(booking: booking),
   );
   return result ?? false;
 }
@@ -59,19 +49,16 @@ class _CancelBookingSheetState extends ConsumerState<_CancelBookingSheet> {
   Widget build(BuildContext context) {
     final preview = ref.watch(cancellationPreviewProvider(widget.booking.id));
 
-    return Container(
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: AppRadius.sheet,
-      ),
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SheetHeader(title: 'Cancel this booking?'),
+              SheetHeader(title: 'Cancel booking?', subtitle: widget.booking.parking.name),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.pageInset,
@@ -80,21 +67,18 @@ class _CancelBookingSheetState extends ConsumerState<_CancelBookingSheet> {
                   AppSpacing.lg,
                 ),
                 child: preview.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    child: Column(
-                      children: [
-                        LoadingSkeleton(height: 80),
-                        SizedBox(height: AppSpacing.lg),
-                        LoadingSkeleton(height: 52),
-                      ],
-                    ),
+                  loading: () => const Column(
+                    children: [
+                      SizedBox(height: AppSpacing.md),
+                      LoadingSkeleton(height: 96, borderRadius: AppRadius.card),
+                      SizedBox(height: AppSpacing.lg),
+                      LoadingSkeleton(height: 56),
+                    ],
                   ),
                   error: (error, _) => ErrorStateView(
                     error: asApiException(error),
                     compact: true,
-                    onRetry: () =>
-                        ref.invalidate(cancellationPreviewProvider(widget.booking.id)),
+                    onRetry: () => ref.invalidate(cancellationPreviewProvider(widget.booking.id)),
                   ),
                   data: (data) => _Body(
                     preview: data,
@@ -115,24 +99,20 @@ class _CancelBookingSheetState extends ConsumerState<_CancelBookingSheet> {
 
   Future<void> _cancel(CancellationPreview preview) async {
     setState(() => _isCancelling = true);
-
     try {
       await ref.read(bookingActionsProvider).cancel(
             widget.booking.id,
             reason: _reason.text.trim().isEmpty ? null : _reason.text.trim(),
           );
-
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop(true);
-
-      ScaffoldMessenger.of(context)
+      messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
           content: Text(
-            // Only mentions a refund when there genuinely is one.
             preview.wasPaid && preview.refund.paise > 0
-                ? 'Booking cancelled. ${preview.refund.display} will be refunded to your '
-                    'original payment method.'
+                ? 'Booking cancelled. ${preview.refund.display} is on its way back to you.'
                 : 'Booking cancelled.',
           ),
           duration: const Duration(seconds: 5),
@@ -140,9 +120,7 @@ class _CancelBookingSheetState extends ConsumerState<_CancelBookingSheet> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _isCancelling = false);
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      showToast(context, e.message);
     }
   }
 }
@@ -169,12 +147,12 @@ class _Body extends StatelessWidget {
     if (!preview.isCancellable) {
       return Column(
         children: [
-          InlineBanner(
+          const InlineBanner(
             message: 'This booking can no longer be cancelled.',
             tone: BannerTone.warning,
           ),
           const SizedBox(height: AppSpacing.lg),
-          PrimaryButton(label: 'Close', onPressed: onKeep),
+          SecondaryButton(label: 'Close', onPressed: onKeep),
         ],
       );
     }
@@ -182,68 +160,52 @@ class _Body extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          booking.parking.name,
-          style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-
-        // The money, stated plainly. Shown only when money actually changed hands.
         if (preview.wasPaid) ...[
-          AppCard(
+          AppSurface(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
             child: Column(
               children: [
-                DetailRow(label: 'You paid', value: booking.amount.reserved.display),
-                DetailRow(
+                InfoRow(label: 'You paid', value: booking.amount.reserved.display),
+                InfoRow(
                   label: 'Refund (${preview.refundPercent}%)',
                   value: preview.refund.display,
+                  valueColor: preview.refund.paise > 0 ? AppColors.positive : AppColors.ink,
                   emphasise: true,
-                  valueColor:
-                      preview.refund.paise > 0 ? AppColors.success : AppColors.inkMuted,
                 ),
                 if (preview.retained.paise > 0)
-                  DetailRow(label: 'Not refunded', value: preview.retained.display),
+                  InfoRow(label: 'Not refunded', value: preview.retained.display),
               ],
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          Text(
-            // The policy sentence comes from the server, so the app never
-            // paraphrases a rule it does not own.
-            preview.policy,
-            style: context.text.bodySmall?.copyWith(color: context.colors.onSurfaceVariant),
-          ),
+          if (preview.policy.isNotEmpty) Text(preview.policy, style: context.text.bodyMedium),
           if (preview.refund.paise > 0) ...[
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.xs),
             Text(
-              'Refunds usually reach your account within 5–7 working days.',
-              style: context.text.bodySmall?.copyWith(color: context.colors.onSurfaceVariant),
+              'Refunds usually reach your account in 5–7 working days.',
+              style: context.text.bodySmall,
             ),
           ],
         ] else
-          InlineBanner(
-            message: 'No payment has been taken for this booking, so there is nothing '
-                'to refund.',
-            tone: BannerTone.info,
+          const InlineBanner(
+            message: 'No payment was taken for this booking, so there is nothing to refund.',
           ),
-
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.xl),
         AppTextField(
           label: 'Reason (optional)',
           controller: reason,
           hint: 'Plans changed',
           maxLength: 120,
         ),
-
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.xl),
         PrimaryButton(
           label: 'Cancel booking',
-          danger: true,
+          tone: ButtonTone.danger,
           isLoading: isCancelling,
           onPressed: onConfirm,
         ),
-        const SizedBox(height: AppSpacing.sm),
-        TertiaryButton(label: 'Keep my booking', onPressed: isCancelling ? null : onKeep),
+        const SizedBox(height: AppSpacing.xs),
+        Center(child: TertiaryButton(label: 'Keep my booking', onPressed: isCancelling ? null : onKeep)),
       ],
     );
   }

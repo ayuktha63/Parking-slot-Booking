@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// COMMON WIDGETS
+// COMMON BUILDING BLOCKS
 //
-// Small pieces used across several screens. Anything used only once lives with its
-// screen instead — a shared folder full of single-use widgets is worse than none.
+// Rows, not cards. A mobility app reads as a list of clear statements — an icon
+// in a grey disc, a bold line, a grey line, a value — separated by hairlines.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -10,10 +10,11 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
+import 'buttons.dart';
 import 'interaction.dart';
 import 'surfaces.dart';
 
-/// Section heading with an optional trailing action.
+/// A section title with an optional text action on the right.
 class SectionHeader extends StatelessWidget {
   const SectionHeader({
     super.key,
@@ -36,12 +37,12 @@ class SectionHeader extends StatelessWidget {
       padding: padding ??
           const EdgeInsets.fromLTRB(
             AppSpacing.pageInset,
-            AppSpacing.xl,
+            AppSpacing.xxl,
             AppSpacing.pageInset,
-            AppSpacing.md,
+            AppSpacing.sm,
           ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: Column(
@@ -51,20 +52,31 @@ class SectionHeader extends StatelessWidget {
                 Text(title, style: context.text.headlineSmall),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
-                  Text(subtitle!, style: context.text.bodySmall),
+                  Text(subtitle!, style: context.text.bodyMedium),
                 ],
               ],
             ),
           ),
           if (actionLabel != null && onAction != null)
-            TextButton(
-              onPressed: onAction,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                minimumSize: const Size(0, 36),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Pressable(
+              onTap: onAction,
+              depth: PressDepth.firm,
+              tint: false,
+              borderRadius: AppRadius.chip,
+              semanticLabel: actionLabel,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xs,
+                  vertical: AppSpacing.xs,
+                ),
+                child: Text(
+                  actionLabel!,
+                  style: context.text.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
               ),
-              child: Text(actionLabel!),
             ),
         ],
       ),
@@ -72,14 +84,205 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// Text field with a consistent label, error and helper treatment.
-///
-/// Always uses a floating `labelText` rather than hint-only, so the field's purpose
-/// survives the user starting to type — the old plate field lost its label entirely.
+/// A grey disc holding an icon — the leading element of a row.
+class IconDisc extends StatelessWidget {
+  const IconDisc({
+    super.key,
+    required this.icon,
+    this.size = AppSizes.iconDisc,
+    this.color = AppColors.fill,
+    this.iconColor = AppColors.ink,
+  });
+
+  final IconData icon;
+  final double size;
+  final Color color;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      child: Icon(icon, size: size * 0.5, color: iconColor),
+    );
+  }
+}
+
+/// The standard list row: leading, a bold line, a grey line, and a trailing
+/// value or chevron.
+class ListRow extends StatelessWidget {
+  const ListRow({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.icon,
+    this.trailing,
+    this.value,
+    this.onTap,
+    this.chevron,
+    this.destructive = false,
+    this.padding,
+    this.dense = false,
+  });
+
+  final String title;
+  final String? subtitle;
+
+  /// A custom leading widget. [icon] is a shorthand for a grey [IconDisc].
+  final Widget? leading;
+  final IconData? icon;
+
+  final Widget? trailing;
+
+  /// A short grey value shown on the right, before the chevron.
+  final String? value;
+
+  final VoidCallback? onTap;
+
+  /// Defaults to showing a chevron whenever the row is tappable.
+  final bool? chevron;
+
+  final bool destructive;
+  final EdgeInsetsGeometry? padding;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final lead = leading ?? (icon == null ? null : IconDisc(icon: icon!, size: dense ? 36 : 40));
+    final showChevron = chevron ?? onTap != null;
+    final titleStyle = context.text.titleMedium?.copyWith(
+      color: destructive ? AppColors.negative : AppColors.ink,
+      fontWeight: subtitle == null ? FontWeight.w500 : FontWeight.w600,
+    );
+
+    final row = Padding(
+      padding: padding ??
+          EdgeInsets.symmetric(
+            horizontal: AppSpacing.pageInset,
+            vertical: dense ? AppSpacing.md : AppSpacing.md + 2,
+          ),
+      child: Row(
+        children: [
+          if (lead != null) ...[lead, const SizedBox(width: AppSpacing.lg)],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: titleStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: context.text.bodyMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (value != null) ...[
+            const SizedBox(width: AppSpacing.md),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                value!,
+                style: context.text.bodyMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
+          ],
+          if (trailing != null) ...[const SizedBox(width: AppSpacing.md), trailing!],
+          if (showChevron) ...[
+            const SizedBox(width: AppSpacing.xs),
+            const Icon(Icons.chevron_right_rounded,
+                size: AppSizes.iconMd, color: AppColors.inkDisabled),
+          ],
+        ],
+      ),
+    );
+
+    if (onTap == null) return row;
+    return Pressable(
+      onTap: onTap,
+      depth: PressDepth.subtle,
+      borderRadius: BorderRadius.zero,
+      // The value is part of what the row says ("Name, Test Driver").
+      semanticLabel: [title, if (subtitle != null) subtitle!, if (value != null) value!].join(', '),
+      child: row,
+    );
+  }
+}
+
+/// A label on the left and its value on the right — receipts and summaries.
+class InfoRow extends StatelessWidget {
+  const InfoRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.emphasise = false,
+    this.valueColor,
+    this.labelColor,
+    this.padding = const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+  });
+
+  final String label;
+  final String value;
+  final bool emphasise;
+  final Color? valueColor;
+  final Color? labelColor;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: emphasise
+                  ? context.text.titleLarge
+                  : context.text.bodyLarge?.copyWith(
+                      color: labelColor ?? AppColors.inkSecondary,
+                    ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          // Laid out at its own width so it always sits flush right; capped so
+          // a long reference wraps instead of pushing the label off screen.
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.55),
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: (emphasise ? context.text.titleLarge : context.text.bodyLarge)?.copyWith(
+                color: valueColor ?? AppColors.ink,
+                fontWeight: emphasise ? FontWeight.w700 : FontWeight.w500,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A text field in the house style: grey fill, black ring when focused, label
+/// above rather than floating inside.
 class AppTextField extends StatelessWidget {
   const AppTextField({
     super.key,
-    required this.label,
+    this.label,
     this.controller,
     this.hint,
     this.helper,
@@ -97,9 +300,12 @@ class AppTextField extends StatelessWidget {
     this.maxLength,
     this.textCapitalization = TextCapitalization.none,
     this.focusNode,
+    this.style,
+    this.textAlign = TextAlign.start,
+    this.autofillHints,
   });
 
-  final String label;
+  final String? label;
   final TextEditingController? controller;
   final String? hint;
   final String? helper;
@@ -117,10 +323,13 @@ class AppTextField extends StatelessWidget {
   final int? maxLength;
   final TextCapitalization textCapitalization;
   final FocusNode? focusNode;
+  final TextStyle? style;
+  final TextAlign textAlign;
+  final Iterable<String>? autofillHints;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    final field = TextField(
       controller: controller,
       focusNode: focusNode,
       autofocus: autofocus,
@@ -132,328 +341,124 @@ class AppTextField extends StatelessWidget {
       maxLength: maxLength,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
-      style: context.text.bodyLarge,
+      textAlign: textAlign,
+      autofillHints: autofillHints,
+      cursorColor: AppColors.ink,
+      style: style ?? context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
       decoration: InputDecoration(
-        labelText: label,
         hintText: hint,
         helperText: helper,
         errorText: errorText,
-        prefixIcon: prefixIcon == null ? null : Icon(prefixIcon, size: AppSizes.iconMd),
+        prefixIcon: prefixIcon == null
+            ? null
+            : Icon(prefixIcon, size: AppSizes.iconMd, color: AppColors.ink),
+        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         prefix: prefix,
         suffixIcon: suffix,
-        // The character counter is noise on a phone or plate field.
         counterText: '',
       ),
     );
-  }
-}
-
-/// Rounded surface used for grouped content.
-class AppCard extends StatelessWidget {
-  const AppCard({
-    super.key,
-    required this.child,
-    this.padding = const EdgeInsets.all(AppSpacing.lg),
-    this.onTap,
-    this.margin,
-    this.borderColor,
-    this.level = SurfaceLevel.raised,
-    this.color,
-  });
-
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final VoidCallback? onTap;
-  final EdgeInsetsGeometry? margin;
-
-  /// An outline, for the rare case where one carries meaning — a selected
-  /// state, a destructive confirmation. Null everywhere else, deliberately:
-  /// this used to default to `colors.outline`, so every card in the app was
-  /// boxed and nothing could stand out by being boxed.
-  final Color? borderColor;
-
-  final SurfaceLevel level;
-
-  /// Explicit surface. PARQX mixes dark and light surfaces inside one theme, so
-  /// a card sometimes has to be told which ground it is sitting on.
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = AppSurface(
-      level: level,
-      padding: padding,
-      borderColor: borderColor,
-      color: color,
-      child: child,
-    );
-
-    if (onTap == null) {
-      return Padding(padding: margin ?? EdgeInsets.zero, child: content);
-    }
-
-    return Padding(
-      padding: margin ?? EdgeInsets.zero,
-      child: Pressable(
-        onTap: onTap,
-        borderRadius: AppRadius.card,
-        child: content,
-      ),
-    );
-  }
-}
-
-/// Label/value row used in summaries and receipts.
-class DetailRow extends StatelessWidget {
-  const DetailRow({
-    super.key,
-    required this.label,
-    required this.value,
-    this.icon,
-    this.emphasise = false,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final IconData? icon;
-
-  /// For the total line.
-  final bool emphasise;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: AppSizes.iconSm, color: context.colors.onSurfaceVariant),
-            const SizedBox(width: AppSpacing.sm),
-          ],
-          // BOTH sides flex.
-          //
-          // The label was `Expanded` and the value was a bare `Text`, so a long
-          // value — an address, a plate plus a date, a lot name — pushed the row
-          // open and overflowed. Measured at 213px on the confirmation screen at
-          // 360px width, in a widget used by every receipt and summary in the
-          // app. It had never shown up because the fixtures reached by hand all
-          // happened to have short values.
-          //
-          // The label yields first (it is the least informative half) and
-          // ellipsises; the value keeps its space and wraps rather than being
-          // cut, because a truncated amount or address is worse than a tall row.
-          Flexible(
-            flex: 4,
-            child: Text(
-              label,
-              style: emphasise ? context.text.titleMedium : context.text.bodyMedium,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.lg),
-          Flexible(
-            flex: 5,
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: (emphasise ? context.text.titleLarge : context.text.titleSmall)?.copyWith(
-                color: valueColor,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Location line in the Home header.
-///
-/// Renders a real state — including "location off" — rather than silently showing
-/// coordinates from a city the user may never have visited.
-class LocationHeader extends StatelessWidget {
-  const LocationHeader({
-    super.key,
-    required this.label,
-    required this.onTap,
-    this.isResolving = false,
-    this.hasLocation = true,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final bool isResolving;
-  final bool hasLocation;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppRadius.chip,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasLocation ? Icons.place_rounded : Icons.location_disabled_rounded,
-              size: AppSizes.iconSm,
-              color: hasLocation ? AppColors.brand : context.colors.onSurfaceVariant,
-            ),
-            const SizedBox(width: AppSpacing.xs + 2),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 200),
-              child: Text(
-                isResolving ? 'Finding you…' : label,
-                style: context.text.titleSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: AppSizes.iconSm,
-              color: context.colors.onSurfaceVariant,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Inline banner for a condition the user can resolve.
-/// An inline notice.
-///
-/// Redrawn from a full-bleed tinted slab into a quiet card with a coloured rule
-/// down its leading edge.
-///
-/// The slab version was the single loudest object on the old Home screen: a
-/// full-width amber block for the entirely ordinary condition of location being
-/// switched off. Tinted fills at that scale read as alarm regardless of what
-/// they say, and they set the tone colour against the page rather than against
-/// the message.
-///
-/// A 3px rule states the tone at a glance, an icon repeats it for anyone who
-/// cannot see colour, and the body sits on the ordinary surface — so a notice
-/// takes the room it needs and no more.
-class InlineBanner extends StatelessWidget {
-  const InlineBanner({
-    super.key,
-    required this.message,
-    this.actionLabel,
-    this.onAction,
-    this.icon = Icons.info_outline_rounded,
-    this.tone = BannerTone.info,
-  });
-
-  final String message;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-  final IconData icon;
-  final BannerTone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    // The tone's own colour, and the fill behind it.
-    //
-    // On dark the light "soft" tints are wrong twice over: too bright against a
-    // near-black surface, and unreadable under the ink colour the dark theme
-    // uses. So the dark build tints with the TONE colour at low alpha instead,
-    // and lifts the foreground to a lighter step of the same hue. This widget is
-    // shared byte-for-byte with the operator app, which is entirely dark.
-    final dark = context.isDark;
-
-    final (Color fg, Color bg) = switch (tone) {
-      BannerTone.info => dark
-          ? (const Color(0xFF7FB3FF), AppColors.info)
-          : (AppColors.info, AppColors.infoSoft),
-      BannerTone.warning => dark
-          ? (const Color(0xFFE8A33D), AppColors.warning)
-          : (AppColors.warning, AppColors.warningSoft),
-      BannerTone.success => dark
-          ? (AppColors.successBright, AppColors.success)
-          : (AppColors.success, AppColors.successSoft),
-      BannerTone.danger => dark
-          ? (const Color(0xFFFF8098), AppColors.danger)
-          : (AppColors.danger, AppColors.dangerSoft),
-    };
-
-    final fill = dark ? bg.withValues(alpha: 0.14) : bg.withValues(alpha: 0.55);
-    final ink = dark ? AppColors.inkDark : AppColors.ink;
-
-    return Semantics(
-      liveRegion: true,
-      child: ClipRRect(
-        borderRadius: AppRadius.field,
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 3, color: fg),
-              Expanded(
-                child: Container(
-                  color: fill,
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.md,
-                    AppSpacing.md,
-                    AppSpacing.md,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(icon, size: AppSizes.iconSm, color: fg),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Text(
-                          message,
-                          style: context.text.bodySmall?.copyWith(color: ink),
-                        ),
-                      ),
-                      if (actionLabel != null && onAction != null) ...[
-                        const SizedBox(width: AppSpacing.sm),
-                        Pressable(
-                          onTap: onAction,
-                          depth: PressDepth.firm,
-                          tint: false,
-                          borderRadius: AppRadius.chip,
-                          semanticLabel: actionLabel,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.sm,
-                              vertical: AppSpacing.xs + 2,
-                            ),
-                            child: Text(
-                              actionLabel!,
-                              style: context.text.labelMedium?.copyWith(
-                                color: fg,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    if (label == null) return field;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label!, style: context.text.titleSmall),
+        const SizedBox(height: AppSpacing.sm),
+        field,
+      ],
     );
   }
 }
 
 enum BannerTone { info, warning, success, danger }
 
-/// Consistent bottom sheet presentation.
+/// A tinted message block. Quiet: it informs, it does not shout.
+class InlineBanner extends StatelessWidget {
+  const InlineBanner({
+    super.key,
+    required this.message,
+    this.title,
+    this.actionLabel,
+    this.onAction,
+    this.icon,
+    this.tone = BannerTone.info,
+  });
+
+  final String message;
+  final String? title;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final IconData? icon;
+  final BannerTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color fg, Color bg, IconData defaultIcon) = switch (tone) {
+      BannerTone.info => (AppColors.ink, AppColors.fill, Icons.info_outline_rounded),
+      BannerTone.warning => (AppColors.warning, AppColors.warningSoft, Icons.schedule_rounded),
+      BannerTone.success => (AppColors.positive, AppColors.positiveSoft, Icons.check_circle_outline_rounded),
+      BannerTone.danger => (AppColors.negative, AppColors.negativeSoft, Icons.error_outline_rounded),
+    };
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.md + 2),
+        decoration: BoxDecoration(color: bg, borderRadius: AppRadius.card),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(icon ?? defaultIcon, size: AppSizes.iconSm + 2, color: fg),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (title != null) ...[
+                    Text(title!, style: context.text.titleSmall?.copyWith(color: fg)),
+                    const SizedBox(height: 2),
+                  ],
+                  Text(
+                    message,
+                    style: context.text.bodyMedium?.copyWith(
+                      color: tone == BannerTone.info ? AppColors.inkSecondary : fg,
+                    ),
+                  ),
+                  if (actionLabel != null && onAction != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Pressable(
+                      onTap: onAction,
+                      depth: PressDepth.firm,
+                      tint: false,
+                      borderRadius: AppRadius.chip,
+                      semanticLabel: actionLabel,
+                      child: Text(
+                        actionLabel!,
+                        style: context.text.labelMedium?.copyWith(
+                          color: fg,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                          decorationColor: fg,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Opens a modal bottom sheet with the house grabber and safe-area handling.
 Future<T?> showAppSheet<T>({
   required BuildContext context,
   required Widget child,
@@ -462,44 +467,118 @@ Future<T?> showAppSheet<T>({
 }) {
   return showModalBottomSheet<T>(
     context: context,
+    // Above the tab bar, like every sheet in a mobility app — not inside the tab.
+    useRootNavigator: true,
     isScrollControlled: isScrollControlled,
     isDismissible: isDismissible,
     useSafeArea: true,
-    backgroundColor: Theme.of(context).colorScheme.surface,
+    backgroundColor: AppColors.surface,
     shape: const RoundedRectangleBorder(borderRadius: AppRadius.sheet),
     builder: (_) => child,
   );
 }
 
-/// Header for a bottom sheet: title, optional action, and a close button.
+/// Grabber + title + close, for the top of a modal sheet.
 class SheetHeader extends StatelessWidget {
-  const SheetHeader({super.key, required this.title, this.actionLabel, this.onAction});
+  const SheetHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.actionLabel,
+    this.onAction,
+    this.showClose = true,
+  });
 
   final String title;
+  final String? subtitle;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final bool showClose;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pageInset,
-        AppSpacing.sm,
-        AppSpacing.sm,
-        AppSpacing.md,
-      ),
-      child: Row(
-        children: [
-          Expanded(child: Text(title, style: context.text.headlineSmall)),
-          if (actionLabel != null && onAction != null)
-            TextButton(onPressed: onAction, child: Text(actionLabel!)),
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: () => Navigator.of(context).pop(),
-            tooltip: 'Close',
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SheetGrabber(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pageInset,
+            AppSpacing.xs,
+            AppSpacing.md,
+            AppSpacing.md,
           ),
-        ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title, style: context.text.headlineMedium),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle!, style: context.text.bodyMedium),
+                    ],
+                  ],
+                ),
+              ),
+              if (actionLabel != null && onAction != null)
+                TertiaryButton(label: actionLabel!, onPressed: onAction),
+              if (showClose)
+                CircleButton(
+                  icon: Icons.close_rounded,
+                  tooltip: 'Close',
+                  size: 36,
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A bar pinned to the bottom of a screen holding its primary action.
+class BottomActionBar extends StatelessWidget {
+  const BottomActionBar({super.key, required this.child, this.divider = true});
+
+  final Widget child;
+  final bool divider;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: divider ? const Border(top: BorderSide(color: AppColors.line)) : null,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pageInset,
+            AppSpacing.md,
+            AppSpacing.pageInset,
+            AppSpacing.md,
+          ),
+          child: child,
+        ),
       ),
     );
   }
+}
+
+void showToast(BuildContext context, String message, {Duration? duration}) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(message),
+      // Long enough to read: "Booking cancelled." needs far less time than
+      // "Payments are not available right now. Please try again shortly."
+      duration: duration ??
+          Duration(milliseconds: (1500 + message.length * 60).clamp(3000, 7000)),
+    ));
 }

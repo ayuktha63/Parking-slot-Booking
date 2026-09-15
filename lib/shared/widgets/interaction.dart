@@ -171,7 +171,10 @@ class _PressableState extends State<Pressable> with SingleTickerProviderStateMix
     Widget content = widget.child;
 
     if (widget.tint) {
+      // passthrough: a pressable must never change how its child is sized. The
+      // default (loose) let tiles in an Expanded shrink to their content.
       content = Stack(
+        fit: StackFit.passthrough,
         children: [
           content,
           Positioned.fill(
@@ -183,7 +186,7 @@ class _PressableState extends State<Pressable> with SingleTickerProviderStateMix
                   opacity: _controller.value * (reduceMotion ? 0.10 : 0.055),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: AppColors.shadowTint,
+                      color: AppColors.black,
                       borderRadius: radius,
                     ),
                   ),
@@ -218,16 +221,30 @@ class _PressableState extends State<Pressable> with SingleTickerProviderStateMix
 
     if (widget.semanticLabel != null) {
       return Semantics(
+        // Its own node, as a Material button is. Otherwise a control with no
+        // competing action nearby — Copy beside a heading — merged into the
+        // text around it, and activating that text pressed the button.
+        container: true,
         button: true,
         enabled: _interactive,
         label: widget.semanticLabel,
+        // Excluding the subtree also drops the GestureDetector's own tap action,
+        // which left every labelled control announced as a button that a screen
+        // reader could not press. The actions are restated on this node.
+        onTap: _interactive && widget.onTap != null ? _handleTap : null,
+        onLongPress: _interactive ? widget.onLongPress : null,
         // The label is composed; reading the fragments again would repeat it.
         excludeSemantics: true,
         child: content,
       );
     }
 
-    return Semantics(button: _interactive, enabled: _interactive, child: content);
+    return Semantics(
+      container: _interactive,
+      button: _interactive,
+      enabled: _interactive,
+      child: content,
+    );
   }
 }
 

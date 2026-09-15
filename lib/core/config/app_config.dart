@@ -144,10 +144,26 @@ abstract final class AppConfig {
   static const double fallbackLng =
       int.fromEnvironment('FALLBACK_LNG_MICRO', defaultValue: 76936600) / 1e6;
 
-  /// OpenStreetMap tiles. Requires no API key and no billing account.
-  static const String mapTileUrl =
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  static const String mapAttribution = '© OpenStreetMap contributors';
+  /// Basemap tiles. Defaults to standard OpenStreetMap tiles — no API key —
+  /// rendered through a light grey filter (see AppMapStyle.silver).
+  ///
+  /// Production should point at a licensed provider with a light style:
+  /// `--dart-define=MAP_TILE_URL=...` together with `MAP_ATTRIBUTION`. A custom
+  /// URL is shown unfiltered, as its provider styled it.
+  static const String mapTileUrl = String.fromEnvironment(
+    'MAP_TILE_URL',
+    defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  );
+
+  static const bool mapUsesDefaultTiles = !bool.hasEnvironment('MAP_TILE_URL');
+
+  /// Subdomains for `{s}` in [mapTileUrl]. Ignored by templates without `{s}`.
+  static const List<String> mapTileSubdomains = ['a', 'b', 'c', 'd'];
+
+  static const String mapAttribution = String.fromEnvironment(
+    'MAP_ATTRIBUTION',
+    defaultValue: '© OpenStreetMap contributors',
+  );
 
   /// Required by the OSM tile usage policy; must identify the app.
   static const String mapUserAgentPackageName = 'app.parqx.customer';

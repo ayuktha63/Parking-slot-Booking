@@ -391,6 +391,40 @@ class ExploreMapController extends StateNotifier<MapViewState> {
   }
 
   /// Tapping a marker selects it; the sheet scrolls to the matching card.
+  /// A text search ("Koramangala", a lot's name). Unlike [searchVisibleArea]
+  /// it is not limited to what the camera shows — the answer may be across the
+  /// city — so it returns the positions found, for the map to frame them.
+  Future<List<LatLng>> searchText() async {
+    _debounce?.cancel();
+    state = state.copyWith(isLoading: true, clearError: true, showSearchThisArea: false);
+    try {
+      final repository = _ref.read(parkingRepositoryProvider);
+      final location = _ref.read(locationProvider);
+      final base = _ref.read(discoveryQueryProvider).copyWith(limit: 50, offset: 0);
+      final query = location.hasPosition
+          ? base.copyWith(centre: location.position)
+          : base.copyWith(
+              sort: base.sort == ParkingSort.distance ? ParkingSort.popularity : base.sort,
+            );
+      final result = await repository.search(query);
+      if (!mounted) return const [];
+      state = state.copyWith(
+        markers: result.items,
+        isLoading: false,
+        truncated: false,
+        clearSelection: true,
+      );
+      return [
+        for (final p in result.items)
+          if (p.location.latLng != null) p.location.latLng!,
+      ];
+    } on ApiException catch (e) {
+      if (!mounted) return const [];
+      state = state.copyWith(isLoading: false, error: e);
+      return const [];
+    }
+  }
+
   void selectParking(int? id) {
     state = id == null
         ? state.copyWith(clearSelection: true)

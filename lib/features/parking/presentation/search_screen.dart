@@ -1,12 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // SEARCH
 //
-// Server-backed search with suggestions and recents.
-//
-// The old "search" was a TextField that ran `name.contains()` over whatever had
-// already been downloaded, so it could only ever find a lot already on screen. This
-// queries the backend across name, locality, city and landmark, and offers area
-// suggestions alongside specific lots.
+// "Where do you want to park?" — an area, a landmark or a place by name.
+// Picking a place opens it; picking an area (or submitting text) searches for it
+// and returns to the map, which frames what was found.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -15,10 +12,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/discovery_providers.dart';
 import '../../../core/routing/app_router.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.dart';
+import '../../../shared/widgets/common.dart';
+import '../../../shared/widgets/interaction.dart';
 import '../../../shared/widgets/states.dart';
-import '../data/parking_repository.dart';
+import '../../../shared/widgets/surfaces.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -28,8 +26,9 @@ class SearchScreen extends ConsumerStatefulWidget {
 }
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
-  final _controller = TextEditingController();
-  String _term = '';
+  late final TextEditingController _controller =
+      TextEditingController(text: ref.read(discoveryQueryProvider).searchTerm ?? '');
+  late String _term = _controller.text;
 
   @override
   void dispose() {
@@ -46,8 +45,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _openParking(int id) {
+    final router = GoRouter.of(context);
     context.pop();
-    context.push(Routes.parkingDetail(id));
+    router.push(Routes.parkingDetail(id));
   }
 
   @override
@@ -56,123 +56,128 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final suggestions = ref.watch(searchSuggestionsProvider(_term));
 
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        leading: const BackButton(),
-        title: TextField(
-          controller: _controller,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          onChanged: (v) => setState(() => _term = v),
-          onSubmitted: _submit,
-          style: context.text.bodyLarge,
-          decoration: InputDecoration(
-            hintText: 'Search area, landmark or parking',
-            filled: false,
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
-            suffixIcon: _term.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () {
-                      _controller.clear();
-                      setState(() => _term = '');
-                    },
-                  ),
-          ),
-        ),
-      ),
-      body: _term.trim().length < 2
-          ? _RecentsView(
-              recents: recents,
-              onTap: _submit,
-              onRemove: (t) => ref.read(recentSearchesProvider.notifier).remove(t),
-              onClear: () => ref.read(recentSearchesProvider.notifier).clear(),
-            )
-          : suggestions.when(
-              loading: () => const _SuggestionSkeleton(),
-              error: (_, __) => EmptyStateView(
-                icon: Icons.search_off_rounded,
-                title: 'Search unavailable',
-                message: 'We could not search right now. Check your connection and try again.',
-                compact: true,
+      backgroundColor: AppColors.surface,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xs,
+                AppSpacing.sm,
+                AppSpacing.pageInset,
+                AppSpacing.md,
               ),
-              data: (items) => items.isEmpty
-                  ? EmptyStateView(
-                      icon: Icons.search_off_rounded,
-                      title: 'No matches',
-                      message: 'Nothing found for "${_term.trim()}". Try a different area or landmark.',
-                      compact: true,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    tooltip: 'Back',
+                    onPressed: () => context.pop(),
+                  ),
+                  Expanded(
+                    child: AppTextField(
+                      controller: _controller,
+                      autofocus: true,
+                      hint: 'Where do you want to park?',
+                      prefixIcon: Icons.search_rounded,
+                      textInputAction: TextInputAction.search,
+                      onChanged: (v) => setState(() => _term = v),
+                      onSubmitted: _submit,
+                      suffix: _term.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 20),
+                              tooltip: 'Clear',
+                              onPressed: () {
+                                _controller.clear();
+                                setState(() => _term = '');
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Hairline(),
+            Expanded(
+              child: _term.trim().length < 2
+                  ? _RecentsView(
+                      recents: recents,
+                      onTap: _submit,
+                      onRemove: (t) => ref.read(recentSearchesProvider.notifier).remove(t),
+                      onClear: () => ref.read(recentSearchesProvider.notifier).clear(),
                     )
-                  : ListView.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => Divider(
-                        height: 1,
-                        indent: AppSpacing.pageInset + 40,
-                        color: context.colors.outline,
+                  : suggestions.when(
+                      loading: () => const _SuggestionSkeleton(),
+                      error: (_, __) => const EmptyStateView(
+                        icon: Icons.wifi_off_rounded,
+                        title: 'Search is unavailable',
+                        message: 'Check your connection and try again.',
+                        compact: true,
                       ),
-                      itemBuilder: (context, i) => _SuggestionTile(
-                        suggestion: items[i],
-                        onTap: () {
-                          final s = items[i];
-                          if (s.isParking && s.parkingId != null) {
-                            _openParking(s.parkingId!);
-                          } else {
-                            _submit(s.title);
-                          }
-                        },
-                      ),
+                      data: (items) => items.isEmpty
+                          ? _NoMatches(term: _term.trim(), onSearchAnyway: () => _submit(_term))
+                          : ListView(
+                              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                              children: [
+                                for (final s in items)
+                                  ListRow(
+                                    icon: s.isParking
+                                        ? Icons.local_parking_rounded
+                                        : Icons.place_outlined,
+                                    title: s.title,
+                                    subtitle: s.subtitle ??
+                                        (s.parkingCount == null
+                                            ? null
+                                            : '${s.parkingCount} parking place${s.parkingCount == 1 ? '' : 's'}'),
+                                    value: s.distanceMetres == null
+                                        ? null
+                                        : _distance(s.distanceMetres!),
+                                    chevron: false,
+                                    onTap: () {
+                                      if (s.isParking && s.parkingId != null) {
+                                        _openParking(s.parkingId!);
+                                      } else {
+                                        _submit(s.title);
+                                      }
+                                    },
+                                  ),
+                              ],
+                            ),
                     ),
             ),
+          ],
+        ),
+      ),
     );
   }
+
+  static String _distance(int metres) => metres < 1000
+      ? '${(metres / 10).round() * 10} m'
+      : '${(metres / 1000).toStringAsFixed(1)} km';
 }
 
-class _SuggestionTile extends StatelessWidget {
-  const _SuggestionTile({required this.suggestion, required this.onTap});
+class _NoMatches extends StatelessWidget {
+  const _NoMatches({required this.term, required this.onSearchAnyway});
 
-  final SearchSuggestion suggestion;
-  final VoidCallback onTap;
+  final String term;
+  final VoidCallback onSearchAnyway;
 
   @override
   Widget build(BuildContext context) {
-    final isParking = suggestion.isParking;
-
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.surfaceContainerHighest,
-          borderRadius: const BorderRadius.all(AppRadius.rSm),
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      children: [
+        ListRow(
+          icon: Icons.search_rounded,
+          title: 'Search for "$term"',
+          subtitle: 'Look for parking matching this on the map',
+          chevron: false,
+          onTap: onSearchAnyway,
         ),
-        child: Icon(
-          isParking ? Icons.local_parking_rounded : Icons.place_outlined,
-          size: AppSizes.iconSm,
-          color: context.colors.onSurfaceVariant,
-        ),
-      ),
-      title: Text(suggestion.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: suggestion.subtitle == null
-          ? (suggestion.parkingCount != null
-              ? Text('${suggestion.parkingCount} parking areas')
-              : null)
-          : Text(suggestion.subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: suggestion.distanceMetres == null
-          ? const Icon(Icons.north_west_rounded, size: AppSizes.iconSm)
-          : Text(
-              _distance(suggestion.distanceMetres!),
-              style: context.text.bodySmall,
-            ),
+      ],
     );
   }
-
-  static String _distance(int metres) =>
-      metres < 1000 ? '${(metres / 10).round() * 10} m' : '${(metres / 1000).toStringAsFixed(1)} km';
 }
 
 class _RecentsView extends StatelessWidget {
@@ -193,37 +198,31 @@ class _RecentsView extends StatelessWidget {
     if (recents.isEmpty) {
       return const EmptyStateView(
         icon: Icons.search_rounded,
-        title: 'Search for parking',
-        message: 'Try an area, a landmark, or the name of a parking lot.',
+        title: 'Find a place to park',
+        message: 'Search by area, landmark or the name of a parking place.',
         compact: true,
       );
     }
-
     return ListView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.pageInset,
-            AppSpacing.lg,
-            AppSpacing.sm,
-            AppSpacing.sm,
-          ),
-          child: Row(
-            children: [
-              Expanded(child: Text('Recent', style: context.text.titleSmall)),
-              TextButton(onPressed: onClear, child: const Text('Clear')),
-            ],
-          ),
-        ),
+        SectionHeader(title: 'Recent', actionLabel: 'Clear', onAction: onClear),
         for (final term in recents)
-          ListTile(
+          ListRow(
+            icon: Icons.history_rounded,
+            title: term,
+            chevron: false,
             onTap: () => onTap(term),
-            leading: const Icon(Icons.history_rounded),
-            title: Text(term),
-            trailing: IconButton(
-              icon: const Icon(Icons.close_rounded, size: AppSizes.iconSm),
-              onPressed: () => onRemove(term),
-              tooltip: 'Remove',
+            trailing: Pressable(
+              onTap: () => onRemove(term),
+              depth: PressDepth.firm,
+              tint: false,
+              borderRadius: AppRadius.chip,
+              semanticLabel: 'Remove $term',
+              child: const Padding(
+                padding: EdgeInsets.all(AppSpacing.sm),
+                child: Icon(Icons.close_rounded, size: 18, color: AppColors.inkTertiary),
+              ),
             ),
           ),
       ],
@@ -238,15 +237,13 @@ class _SuggestionSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.builder(
       itemCount: 5,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       itemBuilder: (_, __) => const Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: AppSpacing.pageInset,
-          vertical: AppSpacing.md,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pageInset, vertical: AppSpacing.md),
         child: Row(
           children: [
-            LoadingSkeleton(height: 40, width: 40),
-            SizedBox(width: AppSpacing.md),
+            LoadingSkeleton.circle(size: 40),
+            SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

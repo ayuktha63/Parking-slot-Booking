@@ -1,15 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // SIGN IN — PHONE
 //
-// Step 1 of real authentication.
+// Step 1 of real authentication: one question, one field, one black button that
+// rides above the keyboard.
 //
-// The screen it replaces was named `_verifyPhone` and verified nothing: it posted
-// the number to `/api/users/register`, an endpoint that cannot fail, and treated any
-// 200/201 as a successful login. Typing any digits granted that identity — including
-// a stranger's, which also granted their full booking history.
-//
-// It also displayed a "+91" prefix that was NOT prepended to the value sent, so
-// "+919876543210" and "9876543210" created two different accounts.
+// The number is sent exactly as it will be verified — ten digits — so "+91..." and
+// "98765..." can never become two accounts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -22,9 +18,9 @@ import '../../../core/providers/core_providers.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.dart';
-import '../../../core/theme/typography.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/common.dart';
+import '../../../shared/widgets/parqx_controls.dart';
 
 class PhoneScreen extends ConsumerStatefulWidget {
   const PhoneScreen({super.key});
@@ -54,35 +50,25 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     super.dispose();
   }
 
-  /// Enabled only on a plausible Indian mobile number, so the button state itself
-  /// teaches the format instead of waiting for a server rejection.
+  /// A plausible Indian mobile number, so the button itself teaches the format.
   bool get _isValid => RegExp(r'^[6-9]\d{9}$').hasMatch(_digits);
 
   String get _digits => _controller.text.replaceAll(RegExp(r'\D'), '');
 
   void _onChanged() {
-    if (_fieldError != null || _requestError != null) {
-      setState(() {
-        _fieldError = null;
-        _requestError = null;
-      });
-    } else {
-      setState(() {}); // refresh the button's enabled state
-    }
+    setState(() {
+      _fieldError = null;
+      _requestError = null;
+    });
   }
 
   Future<void> _submit() async {
     if (!_isValid || _submitting) return;
-
-    FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;
       _requestError = null;
     });
-
     try {
-      // The normalised digits are what is sent — no decorative prefix that the
-      // request then ignores.
       await ref.read(authControllerProvider.notifier).requestOtp(_digits);
       if (!mounted) return;
       context.push(Routes.otp);
@@ -102,101 +88,125 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Surfaces "your session ended" after a refresh failure, so the user knows why
-    // they are looking at this screen.
     final sessionError = ref.watch(authControllerProvider).error;
 
     return Scaffold(
+      backgroundColor: AppColors.surface,
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageInset),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Column(
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pageInset,
+                  AppSpacing.lg,
+                  AppSpacing.pageInset,
+                  AppSpacing.lg,
+                ),
+                children: [
+                  const Align(alignment: Alignment.centerLeft, child: ParqxWordmark(size: 20)),
+                  const SizedBox(height: AppSpacing.huge),
+                  Text("What's your phone number?", style: context.text.displaySmall),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    "We'll send you a code to confirm it's you.",
+                    style: context.text.bodyLarge?.copyWith(color: AppColors.inkSecondary),
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  if (sessionError != null) ...[
+                    InlineBanner(
+                      message: sessionError.message,
+                      icon: Icons.lock_clock_rounded,
+                      tone: BannerTone.warning,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                  ],
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Spacer(flex: 2),
-
-                      Text('PARQX',
-                          style: AppTypography.wordmark(size: 34, color: AppColors.brand)),
-                      const SizedBox(height: AppSpacing.xxxl),
-
-                      Text('Find parking,\nreserve in seconds',
-                          style: context.text.displayMedium),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        "We'll text you a code to confirm it's you.",
-                        style: context.text.bodyMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.xxxl),
-
-                      if (sessionError != null) ...[
-                        InlineBanner(
-                          message: sessionError.message,
-                          icon: Icons.lock_clock_rounded,
-                          tone: BannerTone.warning,
+                      Container(
+                        height: AppSizes.fieldHeight,
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md + 2),
+                        decoration: const BoxDecoration(
+                          color: AppColors.fill,
+                          borderRadius: AppRadius.field,
                         ),
-                        const SizedBox(height: AppSpacing.lg),
-                      ],
-
-                      AppTextField(
-                        label: 'Mobile number',
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        autofocus: true,
-                        keyboardType: TextInputType.phone,
-                        textInputAction: TextInputAction.done,
-                        maxLength: 10,
-                        errorText: _fieldError,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(10),
-                        ],
-                        onSubmitted: (_) => _submit(),
-                        prefix: Padding(
-                          padding: const EdgeInsets.only(right: AppSpacing.sm),
-                          child: Text('+91', style: context.text.bodyLarge),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('🇮🇳', style: TextStyle(fontSize: 20)),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              '+91',
+                              style: context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ],
                         ),
                       ),
-
-                      if (_requestError != null) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        InlineBanner(
-                          message: _requestError!.message,
-                          icon: Icons.error_outline_rounded,
-                          tone: BannerTone.danger,
-                          actionLabel: _requestError!.isRetryable ? 'Retry' : null,
-                          onAction: _requestError!.isRetryable ? _submit : null,
-                        ),
-                      ],
-
-                      const SizedBox(height: AppSpacing.xl),
-
-                      PrimaryButton(
-                        label: 'Continue',
-                        isLoading: _submitting,
-                        onPressed: _isValid ? _submit : null,
-                      ),
-
-                      const Spacer(flex: 3),
-
-                      Center(
-                        child: Text(
-                          'By continuing you agree to our Terms and Privacy Policy.',
-                          style: context.text.bodySmall,
-                          textAlign: TextAlign.center,
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: AppTextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          autofocus: true,
+                          hint: 'Mobile number',
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.telephoneNumberNational],
+                          maxLength: 10,
+                          errorText: _fieldError,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(10),
+                          ],
+                          onSubmitted: (_) => _submit(),
+                          style: context.text.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.lg),
                     ],
                   ),
-                ),
+                  if (_requestError != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    InlineBanner(
+                      message: _requestError!.message,
+                      tone: BannerTone.danger,
+                      actionLabel: _requestError!.isRetryable ? 'Try again' : null,
+                      onAction: _requestError!.isRetryable ? _submit : null,
+                    ),
+                  ],
+                ],
               ),
-            );
-          },
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pageInset,
+                AppSpacing.sm,
+                AppSpacing.pageInset,
+                AppSpacing.lg,
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'By continuing, you agree to our Terms and Privacy Policy.',
+                    style: context.text.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  PrimaryButton(
+                    label: 'Continue',
+                    trailingIcon: Icons.arrow_forward_rounded,
+                    isLoading: _submitting,
+                    onPressed: _isValid ? _submit : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

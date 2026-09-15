@@ -243,6 +243,16 @@ class ApiClient {
     );
   }
 
+  /// A valid access token for a connection that is not an HTTP request — the
+  /// realtime socket's handshake. Refreshes first when the current token has
+  /// expired, sharing any refresh already in flight.
+  Future<String?> freshAccessToken() async {
+    if (!_tokens.hasValidAccessToken && refreshSession != null) {
+      await _refreshOnce();
+    }
+    return _tokens.accessToken;
+  }
+
   /// Coalesces concurrent refreshes into one.
   Future<AuthSession?> _refreshOnce() {
     final existing = _inFlightRefresh;

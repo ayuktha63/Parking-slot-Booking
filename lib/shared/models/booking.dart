@@ -14,7 +14,7 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'money.dart';
-import 'parking.dart' show VehicleType;
+import 'parking.dart' show VehicleType, formatPlate;
 
 /// The booking lifecycle, exactly as the server defines it.
 ///
@@ -202,6 +202,12 @@ class BookingVehicle {
   final VehicleType type;
   final String? numberPlate;
   final String? label;
+
+  /// The plate as drivers read it ("KA 01 AB 1234"), or null when none was given.
+  String? get displayPlate {
+    final plate = numberPlate?.trim();
+    return plate == null || plate.isEmpty ? null : formatPlate(plate);
+  }
 }
 
 @immutable

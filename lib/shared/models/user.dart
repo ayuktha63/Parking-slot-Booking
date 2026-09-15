@@ -6,7 +6,7 @@
 
 import 'package:flutter/foundation.dart';
 
-import 'parking.dart' show VehicleType;
+import 'parking.dart' show VehicleType, formatPlate;
 
 @immutable
 class AppUser {
@@ -83,16 +83,8 @@ class Vehicle {
   final String? label;
   final bool isDefault;
 
-  /// "KL 01 AB 1234" — plates are stored normalised and shown grouped.
-  String get displayPlate {
-    final p = numberPlate.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
-    if (p.length < 8) return p;
-    final match = RegExp(r'^([A-Z]{2})(\d{1,2})([A-Z]{0,3})(\d{1,4})$').firstMatch(p);
-    if (match == null) return p;
-    return [match.group(1), match.group(2), match.group(3), match.group(4)]
-        .where((g) => g != null && g.isNotEmpty)
-        .join(' ');
-  }
+  /// "KL 01 AB 1234" — see [formatPlate].
+  String get displayPlate => formatPlate(numberPlate);
 
   String get title => label?.trim().isNotEmpty == true ? label! : vehicleType.label;
 }

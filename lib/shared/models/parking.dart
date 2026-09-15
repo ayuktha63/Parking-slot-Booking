@@ -67,6 +67,18 @@ enum VehicleType {
   String get label => this == VehicleType.car ? 'Car' : 'Bike';
 }
 
+/// "KL 01 AB 1234" — plates are stored normalised and shown grouped. Anything
+/// that does not look like an Indian registration is shown as entered.
+String formatPlate(String plate) {
+  final p = plate.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+  if (p.length < 8) return p;
+  final match = RegExp(r'^([A-Z]{2})(\d{1,2})([A-Z]{0,3})(\d{1,4})$').firstMatch(p);
+  if (match == null) return p;
+  return [match.group(1), match.group(2), match.group(3), match.group(4)]
+      .where((g) => g != null && g.isNotEmpty)
+      .join(' ');
+}
+
 @immutable
 class ParkingLocation {
   const ParkingLocation({

@@ -1,14 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // HOLD COUNTDOWN
 //
-// The visible promise that a slot is genuinely reserved.
-//
-// The number shown is recomputed every second from the server's `expires_at`, not
-// decremented locally — see HoldController. This widget only renders it.
-//
-// It changes character as it runs down: calm while there is time, urgent under
-// thirty seconds. That escalation is the whole reason a countdown is worth showing
-// rather than just saying "your slot is held".
+// While a spot is held, a timer says so — computed from the server's expiry, not
+// a local stopwatch. Calm grey while there is time; amber in the last 30 seconds.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -16,106 +10,72 @@ import 'package:flutter/material.dart';
 import '../../../core/providers/booking_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 
+/// A full-width strip under the app bar.
 class HoldCountdownBar extends StatelessWidget {
-  const HoldCountdownBar({
-    super.key,
-    required this.state,
-    this.onExtend,
-    this.showSlot = true,
-  });
+  const HoldCountdownBar({super.key, required this.state, this.onExtend});
 
   final HoldState state;
-
-  /// Null when the hold cannot be extended again — the button is then absent
-  /// rather than present and inert.
   final VoidCallback? onExtend;
-
-  final bool showSlot;
 
   @override
   Widget build(BuildContext context) {
     final hold = state.hold;
     if (hold == null) return const SizedBox.shrink();
-
     final urgent = state.isExpiring;
-    final background = urgent ? AppColors.dangerSoft : AppColors.brandSoft;
-    final foreground = urgent ? AppColors.danger : AppColors.brandStrong;
+    final fg = urgent ? AppColors.warning : AppColors.ink;
 
-    return AnimatedContainer(
-      duration: AppMotion.quick,
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.pageInset,
-        vertical: AppSpacing.md,
-      ),
-      color: background,
-      child: Semantics(
-        liveRegion: true,
-        label: 'Slot ${hold.slot.code} held, ${_spoken(state.secondsRemaining)} remaining',
+    return Semantics(
+      liveRegion: true,
+      label: 'Spot ${hold.slot.code} held for ${_spoken(state.secondsRemaining)}',
+      excludeSemantics: true,
+      child: AnimatedContainer(
+        duration: AppMotion.quick,
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.pageInset,
+          AppSpacing.sm + 2,
+          AppSpacing.sm,
+          AppSpacing.sm + 2,
+        ),
+        color: urgent ? AppColors.warningSoft : AppColors.fillSubtle,
         child: Row(
           children: [
-            Icon(
-              urgent ? Icons.timer_outlined : Icons.lock_clock_rounded,
-              size: AppSizes.iconMd,
-              color: foreground,
-            ),
-            const SizedBox(width: AppSpacing.md),
+            Icon(Icons.lock_clock_outlined, size: AppSizes.iconSm, color: fg),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    showSlot ? 'Slot ${hold.slot.code} is held for you' : 'Slot held for you',
-                    style: context.text.bodyMedium?.copyWith(
-                      color: foreground,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    urgent
-                        ? 'Releasing soon — complete your booking'
-                        : 'Nobody else can book it while the timer runs',
-                    style: context.text.bodySmall?.copyWith(
-                      color: foreground.withValues(alpha: 0.85),
-                    ),
-                  ),
-                ],
+              child: Text(
+                urgent
+                    ? 'Spot ${hold.slot.code} is about to be released'
+                    : 'Spot ${hold.slot.code} is held for you',
+                style: context.text.labelMedium?.copyWith(color: fg, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Tabular figures so the digits do not jitter as the seconds change.
             Text(
               state.countdownLabel,
-              style: context.text.titleMedium?.copyWith(
-                color: foreground,
-                fontWeight: FontWeight.w800,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+              style: AppTypography.numeric(size: 15, weight: FontWeight.w700, color: fg),
             ),
-
-            if (onExtend != null) ...[
-              const SizedBox(width: AppSpacing.sm),
+            if (onExtend != null)
               TextButton(
                 onPressed: state.isWorking ? null : onExtend,
                 style: TextButton.styleFrom(
-                  foregroundColor: foreground,
-                  minimumSize: const Size(0, AppSizes.minTouchTarget),
+                  foregroundColor: fg,
+                  minimumSize: const Size(0, 36),
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                 ),
                 child: const Text('+2 min'),
-              ),
-            ],
+              )
+            else
+              const SizedBox(width: AppSpacing.sm),
           ],
         ),
       ),
     );
   }
 
-  /// Screen readers should hear "1 minute 58 seconds", not "one colon fifty-eight".
   static String _spoken(int seconds) {
     final m = seconds ~/ 60;
     final s = seconds % 60;
@@ -124,8 +84,7 @@ class HoldCountdownBar extends StatelessWidget {
   }
 }
 
-/// The same countdown as a compact pill, for screens where the full bar is too
-/// heavy — the review screen's app bar, for instance.
+/// A compact timer for an app bar.
 class HoldCountdownPill extends StatelessWidget {
   const HoldCountdownPill({super.key, required this.state});
 
@@ -134,33 +93,29 @@ class HoldCountdownPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!state.hasHold) return const SizedBox.shrink();
-
     final urgent = state.isExpiring;
-    final colour = urgent ? AppColors.danger : AppColors.brandStrong;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: urgent ? AppColors.dangerSoft : AppColors.brandSoft,
-        borderRadius: AppRadius.chip,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined, size: AppSizes.iconXs, color: colour),
-          const SizedBox(width: AppSpacing.xs),
-          Text(
-            state.countdownLabel,
-            style: context.text.labelMedium?.copyWith(
-              color: colour,
-              fontWeight: FontWeight.w700,
-              fontFeatures: const [FontFeature.tabularFigures()],
+    final fg = urgent ? AppColors.warning : AppColors.ink;
+    return Semantics(
+      label: 'Spot held for ${state.countdownLabel}',
+      excludeSemantics: true,
+      child: AnimatedContainer(
+        duration: AppMotion.quick,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
+        decoration: BoxDecoration(
+          color: urgent ? AppColors.warningSoft : AppColors.fill,
+          borderRadius: AppRadius.chip,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.timer_outlined, size: 16, color: fg),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              state.countdownLabel,
+              style: AppTypography.numeric(size: 14, weight: FontWeight.w700, color: fg),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

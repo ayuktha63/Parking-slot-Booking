@@ -257,6 +257,38 @@ class SlotLayout {
 
   bool get isEmpty => rows.isEmpty;
 
+  /// Counts derived from the spots themselves.
+  ///
+  /// [summary] is correct at fetch time, but realtime events update individual
+  /// spots and never the summary — so after the first hold or booking by someone
+  /// else the headline count and the floor plan disagree. Deriving the numbers
+  /// from the same spots that are drawn keeps them in step.
+  AvailabilitySummary get liveSummary {
+    var available = 0, booked = 0, held = 0, closed = 0, total = 0;
+    for (final row in rows) {
+      for (final slot in row.slots) {
+        total++;
+        switch (slot.status) {
+          case SlotStatus.available:
+            available++;
+          case SlotStatus.held:
+            held++;
+          case SlotStatus.booked:
+            booked++;
+          case SlotStatus.closed:
+            closed++;
+        }
+      }
+    }
+    return AvailabilitySummary(
+      total: total,
+      available: available,
+      booked: booked,
+      held: held,
+      closed: closed,
+    );
+  }
+
   /// Applies a live socket update without refetching the whole layout.
   SlotLayout withSlotUpdate({
     required int slotId,

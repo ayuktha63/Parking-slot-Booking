@@ -1,40 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // BUTTONS
 //
-// Three levels, and the levels are the point.
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// THE HIERARCHY
-//
-//   PrimaryButton    filled brand, lit by its own shadow.  ONE per screen.
-//   SecondaryButton  filled tonal — a quiet surface, ink label.  No outline.
-//   TertiaryButton   text only.
-//
-// The old set was filled / OUTLINED / text. Outlined is a poor middle term: it
-// has the same footprint and visual weight as the primary button, differing only
-// in fill, so a screen with both showed two equally-sized rectangles competing
-// for the same attention. It also added yet another 1px box to a UI that already
-// outlined its cards, chips, fields and banners.
-//
-// Filled-tonal solves both. It is unmistakably subordinate to the brand fill,
-// and it separates from the page by surface step rather than by yet another
-// border.
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// WHY THESE ARE NOT MATERIAL BUTTONS ANY MORE
-//
-// `AppTheme` switches the ink ripple off globally (it is the single most
-// recognisable Material gesture, and this product wants its own). A
-// `FilledButton` with no ripple has NO press feedback at all, which is worse
-// than the ripple it replaced.
-//
-// These are built on `Pressable` instead, so a button compresses and springs
-// back exactly like every card, chip and tile in the app — one interaction model
-// everywhere. `Pressable` emits `Semantics(button:, enabled:)` itself, so screen
-// readers and the accessibility tree see a real button.
-//
-// LOADING is built in, because it is the thing screens forget: the old app left
-// buttons live during a request, so double-taps produced duplicate bookings.
+//   PrimaryButton    black, full width. The one obvious next step.
+//   SecondaryButton  grey fill. A real alternative, never competing with black.
+//   TertiaryButton   text only. Escape hatches: "Skip", "Keep my booking".
+//   PillButton       small grey pill with an icon. Row-level actions.
+//   CircleButton     round icon control — white over the map, grey on a page.
+//   AppFilterChip    a toggle. Grey when off, black when on.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -45,94 +17,61 @@ import 'interaction.dart';
 
 enum AppButtonSize { regular, compact }
 
-/// What a filled button MEANS, which decides its colour.
-///
-/// Colour on a primary action is not decoration — it is the product telling the
-/// user what kind of thing is about to happen. Three meanings, three fills:
-///
-///   brand      the ordinary next step, and anything involving money.
-///   complete   a successful conclusion — checking out of a session you paid
-///              for. Deliberately not brand (that reads as "pay") and
-///              deliberately not danger (that reads as "you are about to lose
-///              something").
-///   danger     destructive and hard to undo — cancelling, removing.
-enum ButtonTone { brand, complete, danger }
+enum ButtonTone { primary, danger }
 
-/// Filled brand. The single most important action on a screen.
-///
-/// If a screen has two of these, one of them is not the most important action.
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
     super.key,
     required this.label,
     this.onPressed,
     this.icon,
+    this.trailingIcon,
     this.isLoading = false,
     this.expand = true,
     this.size = AppButtonSize.regular,
-    this.danger = false,
-    this.tone = ButtonTone.brand,
+    this.tone = ButtonTone.primary,
     this.feedback = PressFeedback.none,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
+  final IconData? trailingIcon;
   final bool isLoading;
   final bool expand;
   final AppButtonSize size;
-
-  /// For destructive actions — cancelling a booking, removing a vehicle.
-  ///
-  /// Retained for the many call sites that use it; equivalent to
-  /// `tone: ButtonTone.danger`.
-  final bool danger;
-
-  /// What this action means. See [ButtonTone].
   final ButtonTone tone;
-
-  /// Most primary buttons commit something, but the haptic belongs to the
-  /// SERVER's answer, not to the tap. Screens that confirm optimistically pass
-  /// this; screens that wait for a response fire `Haptics.success()` themselves.
   final PressFeedback feedback;
 
   @override
   Widget build(BuildContext context) {
-    // A loading button is disabled, so a double-tap cannot fire twice.
     final enabled = onPressed != null && !isLoading;
-    final effectiveTone = danger ? ButtonTone.danger : tone;
-    final background = switch (effectiveTone) {
-      ButtonTone.brand => AppColors.brand,
-      ButtonTone.complete => AppColors.success,
-      ButtonTone.danger => AppColors.danger,
+    final background = switch (tone) {
+      ButtonTone.primary => AppColors.ink,
+      ButtonTone.danger => AppColors.negative,
     };
+    // A loading button keeps its colour: it is busy, not unavailable.
+    final fill = enabled || isLoading ? background : AppColors.fill;
+    final ink = enabled || isLoading ? AppColors.onInk : AppColors.inkDisabled;
 
     return _ButtonShell(
       onPressed: enabled ? onPressed : null,
       feedback: feedback,
       expand: expand,
       size: size,
-      semanticLabel: label,
-      background: enabled ? background : AppColors.surfaceAlt,
-      foreground: enabled ? AppColors.onBrand : AppColors.inkMuted,
-      // Only an enabled primary glows. A disabled one that still throws brand
-      // light looks available and is not.
-      // Only the brand action glows. A glowing green or red would put two lit
-      // controls on one screen, and then neither is the primary.
-      shadow: enabled && effectiveTone == ButtonTone.brand
-          ? AppShadows.brandLift
-          : AppShadows.none,
+      semanticLabel: isLoading ? '$label, in progress' : label,
+      background: fill,
       child: _ButtonContent(
         label: label,
         icon: icon,
+        trailingIcon: trailingIcon,
         isLoading: isLoading,
-        foreground: enabled ? AppColors.onBrand : AppColors.inkMuted,
+        foreground: ink,
       ),
     );
   }
 }
 
-/// Filled tonal. The alternative beside a primary action.
 class SecondaryButton extends StatelessWidget {
   const SecondaryButton({
     super.key,
@@ -154,27 +93,22 @@ class SecondaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null && !isLoading;
-    final foreground = enabled ? context.colors.onSurface : AppColors.inkMuted;
-
     return _ButtonShell(
       onPressed: enabled ? onPressed : null,
       expand: expand,
       size: size,
-      semanticLabel: label,
-      background: context.colors.surfaceContainer,
-      foreground: foreground,
-      shadow: AppShadows.none,
+      semanticLabel: isLoading ? '$label, in progress' : label,
+      background: AppColors.fill,
       child: _ButtonContent(
         label: label,
         icon: icon,
         isLoading: isLoading,
-        foreground: foreground,
+        foreground: enabled || isLoading ? AppColors.ink : AppColors.inkDisabled,
       ),
     );
   }
 }
 
-/// Text only, for tertiary actions.
 class TertiaryButton extends StatelessWidget {
   const TertiaryButton({
     super.key,
@@ -192,11 +126,10 @@ class TertiaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colour = onPressed == null
-        ? AppColors.inkMuted
+        ? AppColors.inkDisabled
         : danger
-            ? AppColors.danger
-            : context.colors.primary;
-
+            ? AppColors.negative
+            : AppColors.ink;
     return Pressable(
       onTap: onPressed,
       depth: PressDepth.firm,
@@ -228,7 +161,274 @@ class TertiaryButton extends StatelessWidget {
   }
 }
 
-/// Shared geometry and press behaviour for the filled variants.
+/// A small grey pill: "Directions", "Cancel", "Book again".
+class PillButton extends StatelessWidget {
+  const PillButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.isLoading = false,
+    this.inverted = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool isLoading;
+
+  /// Black instead of grey — for the one action on a row that matters most.
+  final bool inverted;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !isLoading;
+    final fg = !enabled && !isLoading
+        ? AppColors.inkDisabled
+        : inverted
+            ? AppColors.onInk
+            : AppColors.ink;
+    return Pressable(
+      onTap: enabled ? onPressed : null,
+      depth: PressDepth.firm,
+      tint: false,
+      borderRadius: AppRadius.chip,
+      semanticLabel: label,
+      child: Container(
+        height: AppSizes.pillHeight,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md + 2),
+        decoration: BoxDecoration(
+          color: inverted ? AppColors.ink : AppColors.fill,
+          borderRadius: AppRadius.chip,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading)
+              SizedBox(
+                width: AppSizes.iconXs,
+                height: AppSizes.iconXs,
+                child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+              )
+            else if (icon != null)
+              Icon(icon, size: AppSizes.iconSm - 2, color: fg),
+            if (isLoading || icon != null) const SizedBox(width: AppSpacing.xs + 2),
+            Text(
+              label,
+              style: context.text.labelMedium?.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A round icon control.
+class CircleButton extends StatelessWidget {
+  const CircleButton({
+    super.key,
+    required this.icon,
+    required this.onPressed,
+    required this.tooltip,
+    this.size = AppSizes.mapControl,
+    this.floating = false,
+    this.dark = false,
+    this.badge = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final String tooltip;
+  final double size;
+
+  /// White with a shadow — for controls over the map or a photograph.
+  final bool floating;
+
+  /// Black — the primary round action (the "next" arrow).
+  final bool dark;
+
+  /// A small black dot: "something here is active".
+  final bool badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = dark
+        ? (onPressed == null ? AppColors.fill : AppColors.ink)
+        : floating
+            ? AppColors.surface
+            : AppColors.fill;
+    final foreground = dark
+        ? (onPressed == null ? AppColors.inkDisabled : AppColors.onInk)
+        : AppColors.ink;
+    return Pressable(
+      onTap: onPressed,
+      depth: PressDepth.firm,
+      tint: false,
+      borderRadius: BorderRadius.circular(size),
+      semanticLabel: tooltip,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedContainer(
+            duration: AppMotion.quick,
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: background,
+              shape: BoxShape.circle,
+              boxShadow: floating ? AppShadows.floating : AppShadows.none,
+            ),
+            child: Icon(icon, size: size * 0.46, color: foreground),
+          ),
+          if (badge)
+            Positioned(
+              top: size * 0.14,
+              right: size * 0.14,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: AppColors.ink,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.white, width: 2),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Back arrow as a grey circle, for screens without an app bar.
+class BackCircleButton extends StatelessWidget {
+  const BackCircleButton({super.key, this.floating = false, this.onPressed});
+
+  final bool floating;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleButton(
+      icon: Icons.arrow_back_rounded,
+      tooltip: 'Back',
+      size: 44,
+      floating: floating,
+      onPressed: onPressed ?? () => Navigator.of(context).maybePop(),
+    );
+  }
+}
+
+/// Back for a collapsing header: a white floating circle while the header
+/// image or map is showing, a plain arrow once the bar has collapsed to white.
+class CollapsingBackButton extends StatelessWidget {
+  const CollapsingBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.dependOnInheritedWidgetOfExactType<FlexibleSpaceBarSettings>();
+    final delta = (settings?.maxExtent ?? 0) - (settings?.minExtent ?? 0);
+    final collapsed = delta <= 0 ||
+        (1 - ((settings!.currentExtent - settings.minExtent) / delta)).clamp(0.0, 1.0) > 0.85;
+    return AnimatedSwitcher(
+      duration: AppMotion.quick,
+      child: collapsed
+          ? IconButton(
+              key: const ValueKey('plain'),
+              icon: const Icon(Icons.arrow_back_rounded),
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).maybePop(),
+            )
+          : const BackCircleButton(key: ValueKey('floating'), floating: true),
+    );
+  }
+}
+
+class AppFilterChip extends StatelessWidget {
+  const AppFilterChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.badgeCount,
+    this.floating = false,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final int? badgeCount;
+
+  /// White with a shadow, for chips laid over the map.
+  final bool floating;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = selected ? AppColors.onInk : AppColors.ink;
+    final bg = selected
+        ? AppColors.ink
+        : floating
+            ? AppColors.surface
+            : AppColors.fill;
+    return Pressable(
+      onTap: onTap,
+      feedback: PressFeedback.selection,
+      depth: PressDepth.firm,
+      borderRadius: AppRadius.chip,
+      semanticLabel: label,
+      tint: false,
+      child: AnimatedContainer(
+        duration: AppMotion.quick,
+        curve: AppMotion.standard,
+        height: AppSizes.chipHeight,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md + 2),
+        // No `alignment` here: an aligned Container grows to the width its parent
+        // allows, which stretched every chip across a Wrap.
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: AppRadius.chip,
+          boxShadow: floating && !selected ? AppShadows.floating : AppShadows.none,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: AppSizes.iconSm - 2, color: fg),
+              const SizedBox(width: AppSpacing.xs + 2),
+            ],
+            Text(
+              label,
+              style: context.text.labelMedium?.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (badgeCount != null && badgeCount! > 0) ...[
+              const SizedBox(width: AppSpacing.xs + 2),
+              Text(
+                '$badgeCount',
+                style: context.text.labelMedium?.copyWith(
+                  color: selected ? AppColors.onInk : AppColors.inkTertiary,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/* ── internals ─────────────────────────────────────────────────────────────── */
+
 class _ButtonShell extends StatelessWidget {
   const _ButtonShell({
     required this.child,
@@ -236,8 +436,6 @@ class _ButtonShell extends StatelessWidget {
     required this.expand,
     required this.size,
     required this.background,
-    required this.foreground,
-    required this.shadow,
     required this.semanticLabel,
     this.feedback = PressFeedback.none,
   });
@@ -247,8 +445,6 @@ class _ButtonShell extends StatelessWidget {
   final bool expand;
   final AppButtonSize size;
   final Color background;
-  final Color foreground;
-  final List<BoxShadow> shadow;
   final String semanticLabel;
   final PressFeedback feedback;
 
@@ -256,12 +452,9 @@ class _ButtonShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final height =
         size == AppButtonSize.compact ? AppSizes.buttonHeightCompact : AppSizes.buttonHeight;
-
     final button = Pressable(
       onTap: onPressed,
       feedback: feedback,
-      // Full-width controls take the gentlest squeeze: the same ratio that reads
-      // as a firm press on a chip looks like the whole screen flinching here.
       depth: expand ? PressDepth.subtle : PressDepth.standard,
       borderRadius: AppRadius.button,
       semanticLabel: semanticLabel,
@@ -272,25 +465,10 @@ class _ButtonShell extends StatelessWidget {
         height: height,
         padding: EdgeInsets.symmetric(horizontal: expand ? AppSpacing.lg : AppSpacing.xl),
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: AppRadius.button,
-          boxShadow: shadow,
-        ),
-        child: DefaultTextStyle.merge(
-          style: context.text.labelLarge!.copyWith(color: foreground),
-          child: IconTheme(
-            data: IconThemeData(color: foreground, size: AppSizes.iconSm),
-            child: child,
-          ),
-        ),
+        decoration: BoxDecoration(color: background, borderRadius: AppRadius.button),
+        child: child,
       ),
     );
-
-    // `IntrinsicWidth`, not a bare return: the shell's AnimatedContainer has no
-    // width of its own, so an unconstrained parent let a supposedly inline
-    // button fill the screen. Seen on the Active Parking empty state, where
-    // `expand: false` produced a full-width button inside a SliverFillRemaining.
     return expand
         ? SizedBox(width: double.infinity, child: button)
         : IntrinsicWidth(child: button);
@@ -303,170 +481,46 @@ class _ButtonContent extends StatelessWidget {
     required this.isLoading,
     required this.foreground,
     this.icon,
+    this.trailingIcon,
   });
 
   final String label;
   final bool isLoading;
   final Color foreground;
   final IconData? icon;
+  final IconData? trailingIcon;
 
   @override
   Widget build(BuildContext context) {
-    // The spinner replaces the label IN PLACE, so the button does not resize and
-    // shift the layout around it.
-    if (isLoading) {
-      return SizedBox(
-        height: AppSizes.iconMd,
-        width: AppSizes.iconMd,
-        child: CircularProgressIndicator(strokeWidth: 2.2, color: foreground),
-      );
-    }
-
-    if (icon == null) return Text(label, overflow: TextOverflow.ellipsis);
-
-    return Row(
+    final style = context.text.labelLarge?.copyWith(color: foreground);
+    final content = Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, size: AppSizes.iconSm),
-        const SizedBox(width: AppSpacing.sm),
-        Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+        if (icon != null) ...[
+          Icon(icon, size: AppSizes.iconSm + 1, color: foreground),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+        Flexible(child: Text(label, style: style, overflow: TextOverflow.ellipsis)),
+        if (trailingIcon != null) ...[
+          const SizedBox(width: AppSpacing.sm),
+          Icon(trailingIcon, size: AppSizes.iconSm + 1, color: foreground),
+        ],
       ],
     );
-  }
-}
-
-/// Circular icon button that floats over content — map recentre, back over a
-/// photo, a dismiss over a sheet.
-class FloatingIconButton extends StatelessWidget {
-  const FloatingIconButton({
-    super.key,
-    required this.icon,
-    required this.onPressed,
-    this.tooltip,
-    this.isActive = false,
-    this.onDark = false,
-  });
-
-  final IconData icon;
-  final VoidCallback onPressed;
-  final String? tooltip;
-  final bool isActive;
-
-  /// Over the dark map, where a white circle is correct, versus over a light
-  /// page, where it needs its own surface step.
-  final bool onDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Pressable(
-      onTap: onPressed,
-      depth: PressDepth.firm,
-      tint: false,
-      borderRadius: BorderRadius.circular(AppSizes.minTouchTarget),
-      semanticLabel: tooltip ?? '',
-      child: Container(
-        width: AppSizes.minTouchTarget,
-        height: AppSizes.minTouchTarget,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isActive ? AppColors.brand : context.colors.surface,
-          boxShadow: isActive
-              ? AppShadows.brandLift
-              : onDark
-                  ? AppShadows.floating
-                  : AppShadows.md,
+    if (!isLoading) return content;
+    // The spinner takes the content's place; the content stays laid out, unseen,
+    // so a button that sizes to its label does not shrink while busy.
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Visibility.maintain(visible: false, child: content),
+        SizedBox(
+          height: AppSizes.iconMd,
+          width: AppSizes.iconMd,
+          child: CircularProgressIndicator(strokeWidth: 2.4, color: foreground),
         ),
-        child: Icon(
-          icon,
-          size: AppSizes.iconMd,
-          color: isActive ? AppColors.onBrand : context.colors.onSurface,
-        ),
-      ),
-    );
-  }
-}
-
-/// Selectable chip used for quick filters and other narrowing controls.
-///
-/// NOT for vehicle type — that is a segmented switch on Home, because changing
-/// it changes the meaning of every price and count on the screen rather than
-/// merely hiding some rows.
-class AppFilterChip extends StatelessWidget {
-  const AppFilterChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.icon,
-    this.badgeCount,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final IconData? icon;
-
-  /// Shown on the "Filters" chip when filters are active.
-  final int? badgeCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = selected ? AppColors.onBrand : context.colors.onSurfaceVariant;
-
-    return Pressable(
-      onTap: onTap,
-      feedback: PressFeedback.selection,
-      depth: PressDepth.firm,
-      borderRadius: AppRadius.chip,
-      semanticLabel: label,
-      tint: false,
-      child: AnimatedContainer(
-        duration: AppMotion.quick,
-        curve: AppMotion.standard,
-        height: AppSizes.chipHeight,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          // Selected chips fill with the brand rather than tinting and adding a
-          // border. One strong state beats two weak signals stacked.
-          color: selected ? AppColors.brand : context.colors.surfaceContainer,
-          borderRadius: AppRadius.chip,
-          boxShadow: selected ? AppShadows.sm : AppShadows.none,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: AppSizes.iconXs, color: fg),
-              const SizedBox(width: AppSpacing.xs + 2),
-            ],
-            Text(
-              label,
-              style: context.text.labelMedium?.copyWith(
-                color: fg,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-            if (badgeCount != null && badgeCount! > 0) ...[
-              const SizedBox(width: AppSpacing.xs + 2),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.onBrand : AppColors.brand,
-                  borderRadius: AppRadius.chip,
-                ),
-                child: Text(
-                  '$badgeCount',
-                  style: context.text.labelSmall?.copyWith(
-                    color: selected ? AppColors.brand : AppColors.onBrand,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+      ],
     );
   }
 }

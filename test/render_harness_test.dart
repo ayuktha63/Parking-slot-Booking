@@ -179,7 +179,7 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // The closed lot must say so, and must not offer a live Reserve.
-    expect(find.text('Closed'), findsWidgets);
+    expect(find.textContaining('Closed'), findsWidgets);
     await capture(tester, 'card_full');
   });
 
@@ -306,7 +306,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           theme: AppTheme.light(),
-          home: BookingConfirmationScreen(booking: booking),
+          home: BookingConfirmationScreen(bookingId: booking.id, initial: booking),
         ),
       ),
     );
@@ -323,7 +323,7 @@ void main() {
     // The booking code is the access credential. If it is not on this screen,
     // the screen has failed at its only job.
     expect(find.text(booking.code), findsOneWidget);
-    expect(find.text('SHOW THIS AT THE ENTRANCE'), findsOneWidget);
+    expect(find.text('Show this code at the entrance'), findsOneWidget);
   });
 
   // ── unbounded constraints ───────────────────────────────────────────────

@@ -1,15 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// AVAILABILITY BADGE & COLOURS
+// AVAILABILITY
 //
-// One colour language for availability, used by cards, map markers, the slot map
-// and the operator dashboard.
-//
-// The old apps used contradictory languages: the customer app drew occupied slots
-// as a car icon with no legend at all, while the operator app used
-// `stateBooked = errorRed` — so a fully-let lot, the best possible business
-// outcome, rendered as a wall of error red.
-//
-// Here "occupied" is a settled neutral. Red is reserved for things that are wrong.
+// One vocabulary for how full a place is, used by markers, rows and the detail
+// screen alike. Numbers come from the server; nothing here estimates.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -18,7 +11,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
 import '../models/parking.dart';
 
-/// The single mapping from availability state to colour.
+/// The dot colour for an availability state.
 Color availabilityColour(AvailabilityState state) {
   switch (state) {
     case AvailabilityState.available:
@@ -29,164 +22,74 @@ Color availabilityColour(AvailabilityState state) {
       return AppColors.availabilityFull;
     case AvailabilityState.closed:
     case AvailabilityState.unavailable:
-      return AppColors.inkMuted;
+      return AppColors.inkDisabled;
   }
 }
 
-Color availabilityBackground(AvailabilityState state) {
+/// The readable text colour for an availability state.
+Color availabilityTextColour(AvailabilityState state) {
   switch (state) {
     case AvailabilityState.available:
-      return AppColors.slotAvailableSoft;
+      return AppColors.positive;
     case AvailabilityState.limited:
-      return AppColors.slotHeldSoft;
+      return AppColors.warning;
     case AvailabilityState.full:
-      return AppColors.dangerSoft;
+      return AppColors.negative;
     case AvailabilityState.closed:
     case AvailabilityState.unavailable:
-      return AppColors.slotOccupiedSoft;
+      return AppColors.inkTertiary;
   }
 }
 
-enum BadgeSize { small, regular }
+/// "11 spots free", "2 spots left", "Full", "Closed".
+String availabilitySentence(ParkingAvailability availability, {required bool isOpen}) {
+  if (!isOpen || availability.state == AvailabilityState.closed) return 'Closed now';
+  if (availability.totalSlots == 0) return 'No spots listed';
+  final free = availability.availableSlots;
+  if (free == 0) return 'Full';
+  if (availability.state == AvailabilityState.limited) {
+    return free == 1 ? 'Last spot' : '$free spots left';
+  }
+  return '$free spot${free == 1 ? '' : 's'} free';
+}
 
-/// "12 slots" with a state-coloured dot.
-///
-/// Shows a count rather than a bare word, because "12 slots available" answers the
-/// user's real question and "Available" does not.
-class AvailabilityBadge extends StatelessWidget {
-  const AvailabilityBadge({
+/// A coloured dot with the availability sentence.
+class AvailabilityText extends StatelessWidget {
+  const AvailabilityText({
     super.key,
     required this.availability,
-    this.size = BadgeSize.regular,
-    this.showCount = true,
+    required this.isOpen,
+    this.style,
   });
 
   final ParkingAvailability availability;
-  final BadgeSize size;
-  final bool showCount;
+  final bool isOpen;
+  final TextStyle? style;
 
   @override
   Widget build(BuildContext context) {
-    final state = availability.state;
-    final colour = availabilityColour(state);
-    final small = size == BadgeSize.small;
-
-    final label = showCount ? availability.summary : state.label;
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: small ? AppSpacing.sm : AppSpacing.md,
-        vertical: small ? 3 : AppSpacing.xs + 1,
-      ),
-      decoration: BoxDecoration(
-        // Solid surface so it stays legible over a photograph.
-        color: context.colors.surface,
-        borderRadius: AppRadius.chip,
-        border: Border.all(color: colour.withValues(alpha: 0.35)),
-        boxShadow: AppShadows.sm,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: small ? 6 : 7,
-            height: small ? 6 : 7,
-            decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
-          ),
-          SizedBox(width: small ? AppSpacing.xs + 1 : AppSpacing.sm),
-          Text(
-            label,
-            style: (small ? context.text.labelSmall : context.text.labelMedium)?.copyWith(
-              color: context.colors.onSurface,
+    final state = isOpen ? availability.state : AvailabilityState.closed;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: availabilityColour(state), shape: BoxShape.circle),
+        ),
+        const SizedBox(width: AppSpacing.xs + 2),
+        Flexible(
+          child: Text(
+            availabilitySentence(availability, isOpen: isOpen),
+            style: (style ?? context.text.labelMedium)?.copyWith(
+              color: availabilityTextColour(state),
               fontWeight: FontWeight.w600,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Horizontal legend for the slot map.
-///
-/// The operator app had one of these and it was the clearest thing in either app;
-/// the customer slot screen had none, so a user could not tell why a slot was
-/// untappable.
-class SlotLegend extends StatelessWidget {
-  const SlotLegend({super.key, this.entries = defaultEntries});
-
-  static const defaultEntries = <(String, Color)>[
-    ('Available', AppColors.slotAvailable),
-    ('Selected', AppColors.slotSelected),
-    ('Held', AppColors.slotHeld),
-    ('Booked', AppColors.slotOccupied),
-    ('Unavailable', AppColors.slotClosed),
-  ];
-
-  final List<(String, Color)> entries;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: AppSpacing.lg,
-      runSpacing: AppSpacing.sm,
-      children: [
-        for (final (label, colour) in entries)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: colour.withValues(alpha: 0.22),
-                  borderRadius: const BorderRadius.all(Radius.circular(4)),
-                  border: Border.all(color: colour, width: 1.4),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(label, style: context.text.bodySmall),
-            ],
-          ),
+        ),
       ],
-    );
-  }
-}
-
-/// Small status pill used on booking cards.
-class StatusChip extends StatelessWidget {
-  const StatusChip({
-    super.key,
-    required this.label,
-    required this.colour,
-    this.icon,
-  });
-
-  final String label;
-  final Color colour;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.12),
-        borderRadius: AppRadius.chip,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: AppSizes.iconXs, color: colour),
-            const SizedBox(width: AppSpacing.xs),
-          ],
-          Text(
-            label,
-            style: context.text.labelSmall?.copyWith(color: colour, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
     );
   }
 }

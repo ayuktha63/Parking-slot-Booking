@@ -267,6 +267,8 @@ class _BookingReviewScreenState extends ConsumerState<BookingReviewScreen> {
       bottomNavigationBar: _PayBar(
         failed: failed,
         failureMessage: payment.message ?? payment.error?.message,
+        refundDue: payment.refundDue,
+        heldUntil: (payment.booking ?? _booking)?.payment.dueAt,
         bookingExists: _booking != null,
         onViewBooking: _booking == null
             ? null
@@ -654,6 +656,8 @@ class _PayBar extends StatelessWidget {
     required this.onPay,
     this.failed = false,
     this.failureMessage,
+    this.refundDue = false,
+    this.heldUntil,
     this.bookingExists = false,
     this.onViewBooking,
   });
@@ -664,23 +668,55 @@ class _PayBar extends StatelessWidget {
   final VoidCallback onPay;
   final bool failed;
   final String? failureMessage;
+
+  /// The payment arrived after the booking closed. Paying again cannot help.
+  final bool refundDue;
+
+  /// When the server releases the unpaid booking.
+  final DateTime? heldUntil;
   final bool bookingExists;
   final VoidCallback? onViewBooking;
 
   @override
   Widget build(BuildContext context) {
     final recovering = failed && bookingExists;
+
+    if (recovering && refundDue) {
+      return BottomActionBar(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const InlineBanner(
+              title: 'Payment received too late',
+              message: 'This booking closed before your payment arrived, so it could not be used. '
+                  'The full amount is owed back to you.',
+              tone: BannerTone.danger,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            PrimaryButton(label: 'View booking', onPressed: onViewBooking),
+          ],
+        ),
+      );
+    }
+
+    final held = heldUntil;
+    final holdLine = held == null
+        ? 'Your spot is held for a few more minutes.'
+        : 'Your spot is held until ${DateFormat('h:mm a').format(held)}.';
+
     return BottomActionBar(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (recovering) ...[
             InlineBanner(
-              title: 'Booking saved — payment didn\'t go through',
-              message: '${failureMessage ?? 'The payment did not complete.'} '
-                  'Your spot stays reserved while the payment window is open.',
+              title: "Payment wasn't completed",
+              message: [
+                if (failureMessage != null) failureMessage!,
+                '$holdLine Try again to confirm it.',
+              ].join(' '),
               tone: BannerTone.warning,
-              icon: Icons.bookmark_added_outlined,
+              icon: Icons.schedule_rounded,
             ),
             const SizedBox(height: AppSpacing.md),
           ],

@@ -1,0 +1,112 @@
+{
+  "data": {
+    "id": 886,
+    "code": "PQX-PFMCBF",
+    "status": "PENDING_PAYMENT",
+    "status_label": "Awaiting payment",
+    "parking": {
+      "id": 733,
+      "name": "Fixture Lot 87187791",
+      "address_line": null,
+      "locality": null,
+      "city": null,
+      "landmark": null,
+      "contact_phone": null,
+      "cover_photo_url": null,
+      "instructions": null,
+      "location": null
+    },
+    "slot": {
+      "id": 2839,
+      "code": "F1",
+      "row_label": "F",
+      "position": 1,
+      "slot_number": 1,
+      "slot_class": "standard"
+    },
+    "vehicle": {
+      "type": "car",
+      "number_plate": "KA01FX0001",
+      "label": null
+    },
+    "window": {
+      "entry_time": "2026-09-15T16:46:27.799Z",
+      "expected_exit_time": "2026-09-15T17:46:27.799Z",
+      "duration_minutes": 60,
+      "minutes_until_entry": 60
+    },
+    "amount": {
+      "reserved_paise": 4500,
+      "reserved_display": "₹45",
+      "hourly_paise": 4500,
+      "hourly_display": "₹45",
+      "final_paise": null,
+      "final_display": null,
+      "refunded_paise": 0,
+      "currency": "INR"
+    },
+    "payment": {
+      "status": null,
+      "is_paid": false,
+      "reference": null,
+      "verified_at": null,
+      "due_at": "2026-09-15T15:56:27.809Z"
+    },
+    "actions": {
+      "is_cancellable": true,
+      "can_check_in": false,
+      "can_check_out": false,
+      "can_pay": true,
+      "can_review": false
+    },
+    "checked_in_at": null,
+    "checked_out_at": null,
+    "completed_at": null,
+    "cancelled_at": null,
+    "cancelled_by": null,
+    "cancellation_reason": null,
+    "pricing_snapshot": {
+      "ends_at": "2026-09-15T17:46:27.799Z",
+      "currency": "INR",
+      "forecast": {
+        "reason": "Last 60 min — holds 0, pending 0, confirmed 0, departures 0",
+        "signals": {
+          "active_holds": 0,
+          "recent_departures": 0,
+          "recent_pending_bookings": 0,
+          "recent_confirmed_bookings": 0
+        },
+        "confidence": 0.2,
+        "horizon_minutes": 60,
+        "projected_demand_level": "low",
+        "projected_occupied_slots": 0,
+        "projected_occupancy_ratio": 0
+      },
+      "is_surge": false,
+      "occupancy": {
+        "ratio": 0,
+        "held_slots": 0,
+        "total_slots": 1,
+        "occupied_slots": 0,
+        "available_slots": 1
+      },
+      "starts_at": "2026-09-15T16:46:27.799Z",
+      "multiplier": 1,
+      "slot_count": 1,
+      "total_paise": 4500,
+      "billed_hours": 1,
+      "demand_level": "low",
+      "subtotal_paise": 4500,
+      "pricing_formula": "hourly = round_to_rupee(base × clamp(1 + effective_occupancy × 0.2, 1, 1.8)); total = hourly × billed_hours × slots + fees",
+      "base_price_paise": 4500,
+      "duration_minutes": 60,
+      "honoured_from_hold": true,
+      "hourly_price_paise": 4500,
+      "platform_fee_paise": 0,
+      "advance_payable_paise": 900
+    },
+    "checkout_snapshot": {},
+    "source": "customer_app",
+    "created_at": "2026-09-15T15:46:27.809Z"
+  }
+}

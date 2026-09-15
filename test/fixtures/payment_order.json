@@ -1,0 +1,20 @@
+{
+  "data": {
+    "payment_id": 501,
+    "booking_id": 886,
+    "booking_code": "PQX-PFMCBF",
+    "provider": "razorpay",
+    "provider_order_id": "order_FIXTURE1",
+    "key_id": "rzp_test_fixture",
+    "amount_paise": 4500,
+    "amount_display": "₹45",
+    "currency": "INR",
+    "status": "CREATED",
+    "prefill": {
+      "name": "Fixture Customer",
+      "contact": "9287187791"
+    },
+    "description": "Parking at Fixture Lot 87187791",
+    "created_at": "2026-09-15T15:46:27.815Z"
+  }
+}

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/providers/booking_providers.dart';
 import '../../../core/providers/discovery_providers.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
@@ -38,6 +39,8 @@ class ParkingDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(parkingDetailProvider(parkingId));
+    // In the lot's room while this page is open: an operator's edit refreshes it.
+    ref.watch(parkingRoomProvider(parkingId));
     final vehicleType = ref.watch(discoveryQueryProvider.select((q) => q.vehicleType));
 
     return AnnotatedRegion<SystemUiOverlayStyle>(

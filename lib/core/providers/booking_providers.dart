@@ -74,11 +74,11 @@ final liveSlotLayoutProvider = StreamProvider.autoDispose
 
   final realtime = ref.watch(realtimeServiceProvider);
   await realtime.connect();
-  realtime.subscribeToParking(
+  final room = realtime.subscribeToParking(
     parkingAreaId: draft.parkingAreaId,
     vehicleType: draft.vehicleType.wire,
   );
-  ref.onDispose(realtime.unsubscribeFromParking);
+  ref.onDispose(() => realtime.unsubscribeFromParking(room));
 
   await for (final event in realtime.slotUpdates) {
     if (event.parkingAreaId != draft.parkingAreaId) continue;
@@ -509,6 +509,7 @@ class PaymentState {
     this.booking,
     this.error,
     this.message,
+    this.refundDue = false,
   });
 
   final PaymentStage stage;
@@ -517,6 +518,10 @@ class PaymentState {
 
   /// A plain-language note for the failure case. Never a gateway payload.
   final String? message;
+
+  /// Money was received for a booking it could not confirm: the booking closed
+  /// first. The server has recorded the refund owed; paying again cannot help.
+  final bool refundDue;
 
   bool get isBusy =>
       stage == PaymentStage.creatingOrder ||
@@ -562,17 +567,15 @@ class PaymentController extends StateNotifier<PaymentState> {
         await _verify(booking: booking, order: order, result: result);
 
       case CheckoutOutcome.cancelled:
-        // Not a failure worth alarming anyone about. The slot is still theirs
-        // until the payment window closes.
+        // Closing the sheet is not a declined card, but it is not a booking either.
+        // Returning silently to "Pay" left people unsure whether they had booked;
+        // the booking exists, the spot is held for now, and trying again is one tap.
         await _reportFailure(booking, order, 'cancelled_by_user');
-        state = const PaymentState(stage: PaymentStage.idle);
+        state = PaymentState(stage: PaymentStage.failed, booking: booking);
 
       case CheckoutOutcome.failed:
         await _reportFailure(booking, order, result.message ?? 'payment_failed');
-        state = PaymentState(
-          stage: PaymentStage.failed,
-          message: result.message ?? 'The payment did not go through. You can try again.',
-        );
+        state = PaymentState(stage: PaymentStage.failed, booking: booking, message: result.message);
 
       case CheckoutOutcome.unavailable:
         state = PaymentState(
@@ -598,13 +601,21 @@ class PaymentController extends StateNotifier<PaymentState> {
     }
 
     try {
-      final confirmed = await _repository.verifyPayment(
+      final answer = await _repository.verifyPayment(
         bookingId: booking.id,
         orderId: result.orderId!,
         paymentId: result.paymentId!,
         signature: result.signature!,
       );
-      _onConfirmed(confirmed);
+      // A verified payment has not necessarily bought the booking: one that lands
+      // after the booking expired is owed back. The booking's status decides.
+      if (answer.status.isSecured) {
+        _onConfirmed(answer);
+      } else if (answer.payment.isPaid) {
+        _onRefundDue(answer);
+      } else {
+        await _awaitServerConfirmation(booking);
+      }
     } on ApiException catch (e) {
       // The device thinks it paid and the server disagrees. Rather than choosing a
       // side, ask the provider — that is what reconcile is for.
@@ -626,8 +637,14 @@ class PaymentController extends StateNotifier<PaymentState> {
 
       try {
         final current = await _repository.reconcilePayment(booking.id);
-        if (current.status == BookingStatus.confirmed || current.payment.isPaid) {
+        if (current.status.isSecured) {
           _onConfirmed(current);
+          return;
+        }
+        // Paid, but for a booking that closed first. "Is paid" alone used to be
+        // read as booked, and showed a success screen for an expired booking.
+        if (current.payment.isPaid) {
+          _onRefundDue(current);
           return;
         }
       } on ApiException {
@@ -664,8 +681,17 @@ class PaymentController extends StateNotifier<PaymentState> {
 
     // The hold became a booking two steps ago; stop any lingering countdown.
     _ref.read(holdControllerProvider.notifier).consumed();
+    _invalidateBookings();
+  }
 
-    // Bookings, the tab badges and the Home active-parking card are all now stale.
+  void _onRefundDue(Booking booking) {
+    state = PaymentState(stage: PaymentStage.failed, booking: booking, refundDue: true);
+    _orderKey = null;
+    _invalidateBookings();
+  }
+
+  /// Bookings, the tab badges and the Home active-parking card are all now stale.
+  void _invalidateBookings() {
     _ref.invalidate(bookingCountsProvider);
     _ref.invalidate(currentBookingProvider);
     for (final bucket in BookingBucket.values) {
@@ -781,6 +807,17 @@ final bookingActionsProvider = Provider<BookingActionsController>((ref) {
 /// operator changes them. Invalidating the detail — rather than patching it from
 /// the event — means the next read is the server's current truth, including a lot
 /// that has just become closed or full.
+/// Keeps the socket in a lot's room while a screen shows that lot, so an
+/// operator's change to its hours, amenities, photos or price reaches the page
+/// being read (through [parkingConfigSyncProvider]) instead of waiting for the
+/// next visit. Watched by the lot page; released when it closes.
+final parkingRoomProvider = Provider.autoDispose.family<void, int>((ref, parkingAreaId) {
+  final realtime = ref.watch(realtimeServiceProvider);
+  unawaited(realtime.connect());
+  final room = realtime.subscribeToParking(parkingAreaId: parkingAreaId, vehicleType: 'all');
+  ref.onDispose(() => realtime.unsubscribeFromParking(room));
+});
+
 final parkingConfigSyncProvider = Provider<void>((ref) {
   final subscription =
       ref.watch(realtimeServiceProvider).configChanges.listen((event) {

@@ -13,6 +13,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/network/api_client.dart';
 import '../../../shared/models/availability.dart';
 import '../../../shared/models/parking.dart';
+import '../../../shared/models/ids.dart';
 
 /// Server-side query. Every field maps to a query parameter.
 class ParkingQuery {
@@ -279,7 +280,7 @@ class ParkingRepository {
         type: 'parking',
         title: m['name'] as String? ?? '',
         subtitle: m['subtitle'] as String?,
-        parkingId: (m['id'] as num?)?.toInt(),
+        parkingId: parseOptionalId(m['id'], 'suggestion.id'),
         position: (lat != null && lng != null) ? LatLng(lat, lng) : null,
         distanceMetres: (m['distance_metres'] as num?)?.toInt(),
       );

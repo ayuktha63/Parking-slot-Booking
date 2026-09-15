@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../config/app_config.dart';
+import '../../shared/models/ids.dart';
 
 /// A slot changed state in a lot we are watching.
 @immutable
@@ -34,9 +35,9 @@ class SlotUpdateEvent {
   });
 
   factory SlotUpdateEvent.fromJson(Map<String, dynamic> json) => SlotUpdateEvent(
-        parkingAreaId: (json['parking_area_id'] as num?)?.toInt() ?? 0,
+        parkingAreaId: parseId(json['parking_area_id'], 'slot:update.parking_area_id'),
         vehicleType: json['vehicle_type'] as String? ?? '',
-        slotId: (json['slot_id'] as num?)?.toInt() ?? 0,
+        slotId: parseId(json['slot_id'], 'slot:update.slot_id'),
         status: json['status'] as String? ?? 'available',
         // Resolved per-socket by the server from the token, never from a payload
         // the client could have influenced.
@@ -58,7 +59,7 @@ class BookingUpdateEvent {
   const BookingUpdateEvent({required this.bookingId, required this.status});
 
   factory BookingUpdateEvent.fromJson(Map<String, dynamic> json) => BookingUpdateEvent(
-        bookingId: (json['id'] as num?)?.toInt() ?? 0,
+        bookingId: parseId(json['id'], 'booking:update.id'),
         status: json['status'] as String? ?? '',
       );
 
@@ -73,12 +74,13 @@ class HoldExpiredEvent {
   const HoldExpiredEvent({required this.holdId, required this.slotId});
 
   factory HoldExpiredEvent.fromJson(Map<String, dynamic> json) => HoldExpiredEvent(
-        holdId: (json['hold_id'] as num?)?.toInt() ?? 0,
-        slotId: (json['slot_id'] as num?)?.toInt() ?? 0,
+        holdId: parseId(json['hold_id'], 'hold:expired.hold_id'),
+        // Optional: only the hold id is acted on, and an older hold has no slot id.
+        slotId: parseOptionalId(json['slot_id'], 'hold:expired.slot_id'),
       );
 
   final int holdId;
-  final int slotId;
+  final int? slotId;
 }
 
 /// The parking area the customer is looking at was reconfigured by its operator.
@@ -92,7 +94,7 @@ class ParkingConfigChangedEvent {
 
   factory ParkingConfigChangedEvent.fromJson(Map<String, dynamic> json) =>
       ParkingConfigChangedEvent(
-        parkingAreaId: (json['parking_area_id'] as num?)?.toInt() ?? 0,
+        parkingAreaId: parseId(json['parking_area_id'], 'parking:config.parking_area_id'),
         change: json['change'] as String? ?? 'unknown',
       );
 
@@ -137,8 +139,40 @@ class RealtimeService {
 
   bool get isConnected => _socket?.connected ?? false;
 
-  /// The room currently subscribed to, so a reconnect can restore it.
-  ({int parkingAreaId, String vehicleType})? _subscription;
+  /// Parking rooms wanted by what is on screen, oldest first.
+  ///
+  /// Screens stack — a lot's page, and its spot grid on top — but the server keeps
+  /// one parking room per socket. The newest request wins; closing it restores the
+  /// one beneath. With a single slot, closing the grid left the lot page in no room
+  /// at all, so an operator's change never reached it.
+  final List<({int token, int parkingAreaId, String vehicleType})> _subscriptions = [];
+  int _nextToken = 0;
+
+  ({int token, int parkingAreaId, String vehicleType})? get _subscription =>
+      _subscriptions.isEmpty ? null : _subscriptions.last;
+
+  /// The room the socket should be in right now.
+  @visibleForTesting
+  ({int parkingAreaId, String vehicleType})? get activeParkingRoom {
+    final active = _subscription;
+    return active == null ? null : (parkingAreaId: active.parkingAreaId, vehicleType: active.vehicleType);
+  }
+
+  /// Parses one socket payload onto its stream. A malformed payload is dropped:
+  /// events only prompt a refetch of the server's state, so losing one costs a
+  /// moment of staleness, while throwing inside the socket callback costs more.
+  void _deliver<T>(
+    Object? data,
+    StreamController<T> sink,
+    T Function(Map<String, dynamic>) parse,
+  ) {
+    if (data is! Map) return;
+    try {
+      sink.add(parse(data.cast<String, dynamic>()));
+    } on FormatException catch (e) {
+      if (kDebugMode) debugPrint('socket payload dropped: ${e.message}');
+    }
+  }
 
   Future<void> connect() async {
     if (_socket != null) return;
@@ -178,29 +212,10 @@ class RealtimeService {
 
     socket.onDisconnect((_) => _connection.add(false));
 
-    socket.on('slot:update', (data) {
-      if (data is Map) {
-        _slotUpdates.add(SlotUpdateEvent.fromJson(data.cast<String, dynamic>()));
-      }
-    });
-
-    socket.on('booking:update', (data) {
-      if (data is Map) {
-        _bookingUpdates.add(BookingUpdateEvent.fromJson(data.cast<String, dynamic>()));
-      }
-    });
-
-    socket.on('hold:expired', (data) {
-      if (data is Map) {
-        _holdExpiries.add(HoldExpiredEvent.fromJson(data.cast<String, dynamic>()));
-      }
-    });
-
-    socket.on('parking:config', (data) {
-      if (data is Map) {
-        _configChanges.add(ParkingConfigChangedEvent.fromJson(data.cast<String, dynamic>()));
-      }
-    });
+    socket.on('slot:update', (data) => _deliver(data, _slotUpdates, SlotUpdateEvent.fromJson));
+    socket.on('booking:update', (data) => _deliver(data, _bookingUpdates, BookingUpdateEvent.fromJson));
+    socket.on('hold:expired', (data) => _deliver(data, _holdExpiries, HoldExpiredEvent.fromJson));
+    socket.on('parking:config', (data) => _deliver(data, _configChanges, ParkingConfigChangedEvent.fromJson));
 
     socket.onConnectError((error) {
       // Not surfaced to the user: real time is an enhancement, and an app that
@@ -220,9 +235,13 @@ class RealtimeService {
   /// cannot accumulate subscriptions — a real defect in the operator app, which
   /// joined a new room on every vehicle-type switch and never left the old one, so
   /// events arrived two and three times over.
-  void subscribeToParking({required int parkingAreaId, required String vehicleType}) {
-    _subscription = (parkingAreaId: parkingAreaId, vehicleType: vehicleType);
+  /// Joins a lot's room — `vehicleType` 'car', 'bike', or 'all' for the lot-wide
+  /// room. Returns a handle for [unsubscribeFromParking].
+  int subscribeToParking({required int parkingAreaId, required String vehicleType}) {
+    final token = ++_nextToken;
+    _subscriptions.add((token: token, parkingAreaId: parkingAreaId, vehicleType: vehicleType));
     _emitSubscribe(parkingAreaId, vehicleType);
+    return token;
   }
 
   void _emitSubscribe(int parkingAreaId, String vehicleType) {
@@ -232,14 +251,24 @@ class RealtimeService {
     });
   }
 
-  void unsubscribeFromParking() {
-    final current = _subscription;
-    _subscription = null;
-    if (current == null) return;
-    _socket?.emit('parking:unsubscribe', {
-      'parking_area_id': current.parkingAreaId,
-      'vehicle_type': current.vehicleType,
-    });
+  /// Releases one subscription. If it was the active room, the one beneath it is
+  /// rejoined; screens can close in any order, so this goes by handle, not position.
+  void unsubscribeFromParking(int token) {
+    final index = _subscriptions.indexWhere((s) => s.token == token);
+    if (index == -1) return;
+    final wasActive = index == _subscriptions.length - 1;
+    final released = _subscriptions.removeAt(index);
+    if (!wasActive) return;
+
+    final next = _subscription;
+    if (next != null) {
+      _emitSubscribe(next.parkingAreaId, next.vehicleType);
+    } else {
+      _socket?.emit('parking:unsubscribe', {
+        'parking_area_id': released.parkingAreaId,
+        'vehicle_type': released.vehicleType,
+      });
+    }
   }
 
   /// Reconnects with a new token after sign-in or sign-out, because the room

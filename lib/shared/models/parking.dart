@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'money.dart';
+import 'ids.dart';
 
 /// Four availability states, matching the backend's single definition.
 enum AvailabilityState {
@@ -196,7 +197,7 @@ class ParkingPhoto {
   const ParkingPhoto({required this.id, required this.url, this.caption, this.isCover = false});
 
   factory ParkingPhoto.fromJson(Map<String, dynamic> json) => ParkingPhoto(
-        id: (json['id'] as num?)?.toInt() ?? 0,
+        id: parseId(json['id'], 'photo.id'),
         url: json['url'] as String? ?? '',
         caption: json['caption'] as String?,
         isCover: json['is_cover'] == true,
@@ -266,7 +267,7 @@ class ParkingSummary {
   });
 
   factory ParkingSummary.fromJson(Map<String, dynamic> json) => ParkingSummary(
-        id: (json['id'] as num).toInt(),
+        id: parseId(json['id'], 'parking.id'),
         name: json['name'] as String? ?? 'Parking',
         slug: json['slug'] as String?,
         location: ParkingLocation.fromJson(

@@ -149,7 +149,8 @@ class CheckoutService {
           if (order.prefillContact != null) 'contact': order.prefillContact,
           if (order.prefillName != null) 'name': order.prefillName,
         },
-        'theme': {'color': '#5B21B6'},
+        // The app's ink colour, so the gateway sheet reads as part of PARQX.
+        'theme': {'color': '#000000'},
         'retry': {'enabled': true, 'max_count': 2},
         'timeout': 300,
       });

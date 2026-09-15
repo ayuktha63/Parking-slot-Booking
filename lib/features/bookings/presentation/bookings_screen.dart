@@ -63,23 +63,30 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen> {
     final countsValue = ref.watch(bookingCountsProvider);
     final counts = countsValue.valueOrNull;
 
-    // Bookings move between filters — made, parked, finished, cancelled.
-    //  · Out of view (booked from Home, cancelled on the booking's own page),
-    //    follow the booking: open on the one filter that gained. A filter left
-    //    from an earlier visit otherwise hid the booking just made.
-    //  · In view, nothing jumps: cancelling from Upcoming used to throw the
-    //    customer onto Past. The chip counts show where things went.
+    // Bookings move between filters — made, parked, finished, cancelled — and
+    // the list follows the booking to the one filter that gained:
+    //  · when this tab is out of view (booked from Home, cancelled on the
+    //    booking's own page), since a filter left from an earlier visit hid the
+    //    booking just made;
+    //  · or when the filter on screen has just emptied: checked in by the
+    //    operator while the app was in the background, the customer came back to
+    //    "No upcoming parking" with the session live one chip away.
+    // Otherwise the list stays put — a booking moving must not yank the view
+    // away from one the customer is reading. Chip counts show where it went.
     // Inactive tabs and screens under a full-screen route have tickers off.
     _inView = TickerMode.of(context);
     ref.listen(bookingCountsProvider, (previous, next) {
       final before = previous?.valueOrNull;
       final after = next.valueOrNull;
-      if (before == null || after == null || _inView) return;
+      if (before == null || after == null) return;
       final gained = [
         for (final b in BookingBucket.values)
           if (after.forBucket(b) > before.forBucket(b)) b,
       ];
-      if (gained.length == 1) setState(() => _bucket = gained.single);
+      if (gained.length != 1) return;
+      final showing = _bucket ?? _shown;
+      final emptied = showing != null && after.forBucket(showing) == 0;
+      if (!_inView || emptied) setState(() => _bucket = gained.single);
     });
 
     final bucket = _bucket ?? (_inView ? _shown : null) ?? _defaultBucket(counts);

@@ -7,6 +7,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'parking.dart' show VehicleType, formatPlate;
+import 'ids.dart';
 
 @immutable
 class AppUser {
@@ -19,7 +20,7 @@ class AppUser {
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
-        id: (json['id'] as num).toInt(),
+        id: parseId(json['id'], 'id'),
         phone: json['phone'] as String? ?? '',
         name: json['name'] as String?,
         phoneVerified: json['phone_verified'] == true,
@@ -70,7 +71,7 @@ class Vehicle {
   });
 
   factory Vehicle.fromJson(Map<String, dynamic> json) => Vehicle(
-        id: (json['id'] as num).toInt(),
+        id: parseId(json['id'], 'id'),
         vehicleType: VehicleType.parse(json['vehicle_type'] as String?),
         numberPlate: json['number_plate'] as String? ?? '',
         label: json['label'] as String?,

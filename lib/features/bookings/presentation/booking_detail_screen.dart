@@ -147,10 +147,10 @@ class _Content extends StatelessWidget {
                   const SizedBox(height: AppSpacing.lg),
                 ],
                 if (booking.status == BookingStatus.pendingPayment) ...[
-                  const InlineBanner(
+                  InlineBanner(
                     title: 'Waiting for payment',
                     message: 'This booking is not confirmed until payment completes. '
-                        'The spot is only kept for a short time.',
+                        '${booking.payment.dueAt == null ? 'The spot is only kept for a short time.' : 'Your spot is held until ${DateFormat('h:mm a').format(booking.payment.dueAt!)}.'}',
                     tone: BannerTone.warning,
                   ),
                   const SizedBox(height: AppSpacing.lg),
@@ -665,7 +665,9 @@ class _ActionBarState extends ConsumerState<_ActionBar> {
     if (payment.stage == PaymentStage.failed) {
       showToast(
         context,
-        payment.message ?? payment.error?.message ?? 'The payment did not complete.',
+        payment.refundDue
+            ? 'This booking closed before your payment arrived. The full amount is owed back to you.'
+            : payment.message ?? payment.error?.message ?? "Payment wasn't completed.",
       );
     }
   }

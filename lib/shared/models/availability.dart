@@ -12,6 +12,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'parking.dart' show VehicleType;
+import 'ids.dart';
 
 enum SlotStatus {
   available,
@@ -101,7 +102,7 @@ class ParkingSlot {
   });
 
   factory ParkingSlot.fromJson(Map<String, dynamic> json) => ParkingSlot(
-        id: (json['id'] as num).toInt(),
+        id: parseId(json['id'], 'slot.id'),
         code: json['code'] as String? ?? '',
         slotNumber: (json['slot_number'] as num?)?.toInt() ?? 0,
         position: (json['position'] as num?)?.toInt() ?? 0,
@@ -236,7 +237,7 @@ class SlotLayout {
   });
 
   factory SlotLayout.fromJson(Map<String, dynamic> json) => SlotLayout(
-        parkingAreaId: (json['parking_area_id'] as num?)?.toInt() ?? 0,
+        parkingAreaId: parseId(json['parking_area_id'], 'layout.parking_area_id'),
         vehicleType: VehicleType.parse(json['vehicle_type'] as String?),
         window: BookingWindow.fromJson(
           (json['window'] as Map?)?.cast<String, dynamic>() ?? const {},

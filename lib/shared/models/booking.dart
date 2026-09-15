@@ -15,6 +15,7 @@ import 'package:latlong2/latlong.dart';
 
 import 'money.dart';
 import 'parking.dart' show VehicleType, formatPlate;
+import 'ids.dart';
 
 /// The booking lifecycle, exactly as the server defines it.
 ///
@@ -58,6 +59,13 @@ enum BookingStatus {
       this == BookingStatus.checkedIn;
 
   bool get isParked => this == BookingStatus.checkedIn;
+
+  /// A paid booking: confirmed, in use, or finished. The only states in which a
+  /// payment has bought something — the app says "booked" for these and no other.
+  bool get isSecured =>
+      this == BookingStatus.confirmed ||
+      this == BookingStatus.checkedIn ||
+      this == BookingStatus.completed;
   bool get isTerminal => !isLive && this != BookingStatus.unknown;
 }
 
@@ -108,7 +116,7 @@ class BookingParking {
     final lng = (loc?['lng'] as num?)?.toDouble();
 
     return BookingParking(
-      id: (json['id'] as num?)?.toInt() ?? 0,
+      id: parseId(json['id'], 'booking.parking.id'),
       name: json['name'] as String? ?? 'Parking',
       addressLine: json['address_line'] as String?,
       locality: json['locality'] as String?,
@@ -171,7 +179,7 @@ class BookingSlot {
   });
 
   factory BookingSlot.fromJson(Map<String, dynamic> json) => BookingSlot(
-        id: (json['id'] as num?)?.toInt() ?? 0,
+        id: parseId(json['id'], 'slot.id'),
         code: json['code'] as String? ?? '',
         rowLabel: json['row_label'] as String?,
         position: (json['position'] as num?)?.toInt(),
@@ -294,6 +302,7 @@ class BookingPayment {
     required this.isPaid,
     this.reference,
     this.verifiedAt,
+    this.dueAt,
   });
 
   factory BookingPayment.fromJson(Map<String, dynamic> json) => BookingPayment(
@@ -301,6 +310,7 @@ class BookingPayment {
         isPaid: json['is_paid'] == true,
         reference: json['reference'] as String?,
         verifiedAt: DateTime.tryParse(json['verified_at'] as String? ?? '')?.toLocal(),
+        dueAt: DateTime.tryParse(json['due_at'] as String? ?? '')?.toLocal(),
       );
 
   final String? status;
@@ -310,6 +320,10 @@ class BookingPayment {
   /// — real, or absent. Never generated here.
   final String? reference;
   final DateTime? verifiedAt;
+
+  /// When an unpaid booking is released — the server's rule, not a client timer.
+  /// Null once paid.
+  final DateTime? dueAt;
 }
 
 /// What the server says this customer may do with this booking right now.
@@ -439,7 +453,7 @@ class Booking {
         (json[key] as Map?)?.cast<String, dynamic>() ?? const {};
 
     return Booking(
-      id: (json['id'] as num?)?.toInt() ?? 0,
+      id: parseId(json['id'], 'booking.id'),
       code: json['code'] as String? ?? '',
       status: BookingStatus.parse(json['status'] as String?),
       statusLabel: json['status_label'] as String? ?? '',
@@ -518,7 +532,7 @@ class BookingRefund {
   });
 
   factory BookingRefund.fromJson(Map<String, dynamic> json) => BookingRefund(
-        id: (json['id'] as num?)?.toInt() ?? 0,
+        id: parseId(json['id'], 'refund.id'),
         amount: Money.fromJson(json['amount_paise']),
         status: json['status'] as String? ?? 'PENDING',
         processedAt: DateTime.tryParse(json['processed_at'] as String? ?? '')?.toLocal(),
@@ -563,8 +577,8 @@ class SlotHold {
     final window = (json['window'] as Map?)?.cast<String, dynamic>() ?? const {};
 
     return SlotHold(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      parkingAreaId: (json['parking_area_id'] as num?)?.toInt() ?? 0,
+      id: parseId(json['id'], 'hold.id'),
+      parkingAreaId: parseId(json['parking_area_id'], 'hold.parking_area_id'),
       parkingName: json['parking_name'] as String?,
       slot: HeldSlot.fromJson(slotJson),
       entryTime:
@@ -638,7 +652,7 @@ class HeldSlot {
   });
 
   factory HeldSlot.fromJson(Map<String, dynamic> json) => HeldSlot(
-        id: (json['id'] as num?)?.toInt() ?? 0,
+        id: parseId(json['id'], 'slot.id'),
         code: json['code'] as String? ?? '',
         rowLabel: json['row_label'] as String?,
         position: (json['position'] as num?)?.toInt(),
@@ -716,8 +730,8 @@ class PaymentOrder {
   factory PaymentOrder.fromJson(Map<String, dynamic> json) {
     final prefill = (json['prefill'] as Map?)?.cast<String, dynamic>() ?? const {};
     return PaymentOrder(
-      paymentId: (json['payment_id'] as num?)?.toInt() ?? 0,
-      bookingId: (json['booking_id'] as num?)?.toInt() ?? 0,
+      paymentId: parseId(json['payment_id'], 'order.payment_id'),
+      bookingId: parseId(json['booking_id'], 'order.booking_id'),
       bookingCode: json['booking_code'] as String?,
       providerOrderId: json['provider_order_id'] as String? ?? '',
       keyId: json['key_id'] as String?,

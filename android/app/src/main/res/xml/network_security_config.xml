@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 9+ (targetSdk 28+, which this app is) blocks plaintext HTTP by default.
+  The production backend is HTTPS and needs nothing here. Local development points
+  at a plain-HTTP backend on the developer's own machine — 10.0.2.2 is the Android
+  emulator's fixed alias for the host loopback interface, and 127.0.0.1/localhost
+  cover a physical device reached over adb reverse or a host-network emulator.
+
+  This allows cleartext ONLY to those addresses, never as a blanket policy — a
+  release build talking to the real backend is unaffected.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

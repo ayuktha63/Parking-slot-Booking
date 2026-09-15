@@ -1,0 +1,104 @@
+{
+ "data": {
+  "id": 1,
+  "name": "PARQX Test Central",
+  "slug": null,
+  "location": {
+   "lat": 12.9716,
+   "lng": 77.5946,
+   "address_line": "1 Test Road",
+   "locality": "Indiranagar",
+   "city": "Bengaluru",
+   "landmark": null,
+   "postal_code": null
+  },
+  "distance_metres": null,
+  "eta_minutes": null,
+  "availability": {
+   "vehicle_type": "car",
+   "total_slots": 11,
+   "available_slots": 11,
+   "state": "available"
+  },
+  "price": {
+   "hourly_paise": 4500,
+   "hourly_display": "\u20b945",
+   "currency": "INR"
+  },
+  "rating": null,
+  "rating_count": 0,
+  "is_open_now": true,
+  "is_open_24_7": true,
+  "cover_photo_url": null,
+  "amenities": [
+   {
+    "code": "covered",
+    "label": "Covered",
+    "icon": "umbrella"
+   },
+   {
+    "code": "cctv",
+    "label": "CCTV",
+    "icon": "videocam"
+   },
+   {
+    "code": "ev_charging",
+    "label": "EV charging",
+    "icon": "ev_station"
+   }
+  ],
+  "description": null,
+  "instructions": null,
+  "contact_phone": null,
+  "photos": [],
+  "opening_hours": [],
+  "pricing": {
+   "currency": "INR",
+   "base_price_paise": 4500,
+   "hourly_price_paise": 4500,
+   "billed_hours": 1,
+   "slot_count": 1,
+   "subtotal_paise": 4500,
+   "platform_fee_paise": 0,
+   "total_paise": 4500,
+   "multiplier": 1,
+   "is_surge": false,
+   "demand_level": "low",
+   "occupancy": {
+    "total_slots": 11,
+    "occupied_slots": 0,
+    "held_slots": 0,
+    "available_slots": 11,
+    "ratio": 0
+   },
+   "forecast": {
+    "horizon_minutes": 60,
+    "projected_occupancy_ratio": 0,
+    "projected_occupied_slots": 0,
+    "projected_demand_level": "low",
+    "confidence": 0.2,
+    "reason": "Last 60 min \u2014 holds 0, pending 0, confirmed 0, departures 1",
+    "signals": {
+     "active_holds": 0,
+     "recent_pending_bookings": 0,
+     "recent_confirmed_bookings": 0,
+     "recent_departures": 1
+    }
+   },
+   "starts_at": "2026-09-12T17:30:53.806Z",
+   "ends_at": "2026-09-12T18:30:53.806Z",
+   "duration_minutes": 60,
+   "advance_payable_paise": 900,
+   "pricing_formula": "hourly = round_to_rupee(base \u00d7 clamp(1 + effective_occupancy \u00d7 0.2, 1, 1.8)); total = hourly \u00d7 billed_hours \u00d7 slots + fees"
+  },
+  "capacity": {
+   "car": {
+    "total_slots": 12
+   },
+   "bike": {
+    "total_slots": 4
+   }
+  },
+  "max_duration_minutes": 1440
+ }
+}

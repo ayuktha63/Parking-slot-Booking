@@ -1,0 +1,53 @@
+{
+ "data": [
+  {
+   "id": 1,
+   "name": "PARQX Test Central",
+   "slug": null,
+   "location": {
+    "lat": 12.9716,
+    "lng": 77.5946,
+    "address_line": "1 Test Road",
+    "locality": "Indiranagar",
+    "city": "Bengaluru",
+    "landmark": null
+   },
+   "distance_metres": 0,
+   "eta_minutes": 1,
+   "availability": {
+    "vehicle_type": "car",
+    "total_slots": 11,
+    "available_slots": 11,
+    "state": "available"
+   },
+   "price": {
+    "hourly_paise": 4500,
+    "hourly_display": "\u20b945",
+    "currency": "INR"
+   },
+   "rating": null,
+   "rating_count": 0,
+   "is_open_now": true,
+   "is_open_24_7": true,
+   "cover_photo_url": null,
+   "amenities": [
+    "cctv",
+    "covered",
+    "ev_charging"
+   ]
+  }
+ ],
+ "meta": {
+  "window": {
+   "starts_at": "2026-09-12T17:30:53.787Z",
+   "ends_at": "2026-09-12T18:30:53.787Z",
+   "duration_minutes": 60,
+   "vehicle_type": "car"
+  },
+  "page": {
+   "limit": 20,
+   "offset": 0,
+   "has_more": false
+  }
+ }
+}

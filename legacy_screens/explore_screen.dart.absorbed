@@ -1,0 +1,799 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPLORE — the map
+//
+// The feature the old app did not have at all: the "Map" tab was an empty
+// `else if` branch, and `flutter_map` sat in pubspec.yaml unimported.
+//
+// What this does:
+//   - custom price-pill markers with availability state
+//   - grid clustering at low zoom
+//   - user location + recentre
+//   - a draggable sheet with a card carousel
+//   - two-way map ⟷ list sync: tapping a marker selects its card; swiping the
+//     carousel animates the camera
+//   - "Search this area" once the camera has moved meaningfully
+//
+// Tiles are OpenStreetMap, so there is no API key, billing account or cloud project
+// standing between this and working.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../../../core/config/app_config.dart';
+import '../../../core/providers/discovery_providers.dart';
+import '../../../core/routing/app_router.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../shared/models/parking.dart';
+import '../../../shared/widgets/buttons.dart';
+import '../../../shared/widgets/parking_card.dart';
+import '../../../shared/widgets/states.dart';
+import '../../parking/data/parking_repository.dart' show GeoBounds;
+import 'filter_sheet.dart';
+import 'map_marker.dart';
+
+class ExploreScreen extends ConsumerStatefulWidget {
+  const ExploreScreen({super.key});
+
+  @override
+  ConsumerState<ExploreScreen> createState() => _ExploreScreenState();
+}
+
+class _ExploreScreenState extends ConsumerState<ExploreScreen>
+    with TickerProviderStateMixin {
+  /// flutter_map's controller. Unambiguous now that the Riverpod one is named
+  /// `ExploreMapController`.
+  final MapController _map = MapController();
+  late final PageController _carousel;
+
+  /// Guards against the camera-move handler firing while we are moving the camera
+  /// ourselves, which would otherwise show "Search this area" after every card swipe.
+  bool _programmaticMove = false;
+  Timer? _moveDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _carousel = PageController(viewportFraction: 0.86);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initialise());
+  }
+
+  @override
+  void dispose() {
+    _moveDebounce?.cancel();
+    _carousel.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initialise() async {
+    final location = ref.read(locationProvider);
+    if (!location.hasPosition) {
+      await ref.read(locationProvider.notifier).refresh(requestIfDenied: false);
+    }
+    final centre = ref.read(locationProvider).position;
+    if (centre != null && mounted) {
+      _moveCamera(centre, AppConfig.mapDefaultZoom);
+    }
+    await _searchVisible();
+  }
+
+  /// Whether `FlutterMap` has actually mounted and linked its internal
+  /// controller to [_map]. Set by [MapOptions.onMapReady] below.
+  ///
+  /// Needed because `_map.camera` throws until that link exists — and
+  /// `_buildMarkers()` reads it synchronously while constructing `FlutterMap`'s
+  /// own `children` list, i.e. strictly BEFORE `FlutterMap`'s `initState` does
+  /// the linking. Every cold navigation to this screen crashed with
+  /// `LateInitializationError: Field '_internalController' has not been
+  /// initialized` — found only by actually running the app on a device;
+  /// `flutter analyze` has no way to see a lifecycle ordering issue like this.
+  ///
+  /// (`LateInitializationError` itself lives in `dart:_internal` and cannot be
+  /// imported or caught by name from application code, which is why this is a
+  /// readiness flag rather than a try/catch.)
+  bool _mapReady = false;
+
+  double get _safeZoom => _mapReady ? _map.camera.zoom : AppConfig.mapDefaultZoom;
+
+  GeoBounds _visibleBounds() {
+    final bounds = _map.camera.visibleBounds;
+    return GeoBounds(
+      north: bounds.north,
+      south: bounds.south,
+      east: bounds.east,
+      west: bounds.west,
+    );
+  }
+
+  Future<void> _searchVisible() async {
+    await ref.read(mapControllerProvider.notifier).searchVisibleArea(_visibleBounds());
+  }
+
+  /// Animated camera movement. `flutter_map` moves instantly, so the tween is here.
+  void _moveCamera(LatLng target, double zoom) {
+    _programmaticMove = true;
+
+    final startCentre = _map.camera.center;
+    final startZoom = _map.camera.zoom;
+
+    final controller = AnimationController(vsync: this, duration: AppMotion.camera);
+    final curve = CurvedAnimation(parent: controller, curve: AppMotion.decelerate);
+
+    final latTween = Tween(begin: startCentre.latitude, end: target.latitude);
+    final lngTween = Tween(begin: startCentre.longitude, end: target.longitude);
+    final zoomTween = Tween(begin: startZoom, end: zoom);
+
+    controller.addListener(() {
+      _map.move(
+        LatLng(latTween.evaluate(curve), lngTween.evaluate(curve)),
+        zoomTween.evaluate(curve),
+      );
+    });
+
+    controller.forward().whenComplete(() {
+      controller.dispose();
+      // Released on the next frame so the final move event is still suppressed.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _programmaticMove = false);
+    });
+  }
+
+  void _onMapEvent(MapEvent event) {
+    if (_programmaticMove) return;
+    if (event is! MapEventMoveEnd && event is! MapEventFlingAnimationEnd) return;
+
+    _moveDebounce?.cancel();
+    _moveDebounce = Timer(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+      ref.read(mapControllerProvider.notifier).onCameraMoved(
+            centre: _map.camera.center,
+            zoom: _map.camera.zoom,
+          );
+    });
+  }
+
+  /// Marker tap → select, scroll the carousel to match.
+  void _selectParking(ParkingSummary parking, List<ParkingSummary> visible) {
+    ref.read(mapControllerProvider.notifier).selectParking(parking.id);
+
+    final index = visible.indexWhere((p) => p.id == parking.id);
+    if (index >= 0 && _carousel.hasClients) {
+      _carousel.animateToPage(index, duration: AppMotion.normal, curve: AppMotion.standard);
+    }
+
+    final position = parking.location.latLng;
+    if (position != null) _moveCamera(position, _map.camera.zoom);
+  }
+
+  /// Carousel swipe → move the camera to that lot.
+  void _onCarouselChanged(int index, List<ParkingSummary> visible) {
+    if (index < 0 || index >= visible.length) return;
+    final parking = visible[index];
+    ref.read(mapControllerProvider.notifier).selectParking(parking.id);
+    final position = parking.location.latLng;
+    if (position != null) _moveCamera(position, _map.camera.zoom);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mapState = ref.watch(mapControllerProvider);
+    final location = ref.watch(locationProvider);
+    final markers = mapState.markers;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _map,
+            options: MapOptions(
+              initialCenter: location.position ??
+                  const LatLng(AppConfig.fallbackLat, AppConfig.fallbackLng),
+              initialZoom: AppConfig.mapDefaultZoom,
+              minZoom: AppConfig.mapMinZoom,
+              maxZoom: AppConfig.mapMaxZoom,
+              onMapEvent: _onMapEvent,
+              // Tapping empty map clears the selection.
+              onTap: (_, __) =>
+                  ref.read(mapControllerProvider.notifier).selectParking(null),
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
+              onMapReady: () => setState(() => _mapReady = true),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: AppConfig.mapTileUrl,
+                userAgentPackageName: AppConfig.mapUserAgentPackageName,
+                maxZoom: AppConfig.mapMaxZoom,
+                // Keeps tiles from being re-fetched while panning back and forth.
+                panBuffer: 1,
+              ),
+              if (location.hasPosition)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: location.position!,
+                      width: UserLocationMarker.size,
+                      height: UserLocationMarker.size,
+                      child: const UserLocationMarker(),
+                    ),
+                  ],
+                ),
+              MarkerLayer(markers: _buildMarkers(markers)),
+            ],
+          ),
+
+          // Attribution is a requirement of the OSM tile usage policy.
+          Positioned(
+            left: AppSpacing.sm,
+            bottom: _sheetPeekHeight(context) + AppSpacing.xs,
+            child: _Attribution(),
+          ),
+
+          // ── top controls ────────────────────────────────────────────────
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                          child: _SearchPill(onTap: () => context.push(Routes.search))),
+                      const SizedBox(width: AppSpacing.md),
+                      _FilterButton(onPressed: () => _openFilters(context)),
+                    ],
+                  ),
+                  const ActiveFilterBar(),
+                  const SizedBox(height: AppSpacing.md),
+                  if (mapState.showSearchThisArea)
+                    _SearchThisAreaButton(
+                      isLoading: mapState.isLoading,
+                      onTap: _searchVisible,
+                    ),
+                  if (mapState.truncated && !mapState.showSearchThisArea)
+                    const _ZoomInHint(),
+                ],
+              ),
+            ),
+          ),
+
+          // ── recentre ────────────────────────────────────────────────────
+          Positioned(
+            right: AppSpacing.lg,
+            bottom: _sheetPeekHeight(context) + AppSpacing.lg,
+            child: FloatingIconButton(
+              icon: location.hasPosition
+                  ? Icons.my_location_rounded
+                  : Icons.location_searching_rounded,
+              tooltip: 'Recentre',
+              onPressed: () async {
+                final notifier = ref.read(locationProvider.notifier);
+                await notifier.requestPermission();
+                final position = ref.read(locationProvider).position;
+                if (position != null && mounted) {
+                  _moveCamera(position, AppConfig.mapDefaultZoom);
+                  await _searchVisible();
+                }
+              },
+            ),
+          ),
+
+          // ── bottom sheet ────────────────────────────────────────────────
+          _ResultsSheet(
+            markers: markers,
+            isLoading: mapState.isLoading,
+            error: mapState.error,
+            selectedId: mapState.selectedId,
+            carousel: _carousel,
+            onCarouselChanged: (i) => _onCarouselChanged(i, markers),
+            onRetry: _searchVisible,
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Marker> _buildMarkers(List<ParkingSummary> parkings) {
+    final selectedId = ref.read(mapControllerProvider).selectedId;
+    final zoom = _safeZoom;
+
+    // Cluster below the zoom at which pills would overlap illegibly.
+    final clusters = _cluster(parkings, zoom);
+
+    return clusters.map((cluster) {
+      if (cluster.items.length == 1) {
+        final parking = cluster.items.first;
+        return Marker(
+          point: cluster.centre,
+          width: ParkingMapMarker.width,
+          height: ParkingMapMarker.height,
+          alignment: Alignment.topCenter,
+          child: ParkingMapMarker(
+            parking: parking,
+            isSelected: parking.id == selectedId,
+            onTap: () => _selectParking(parking, parkings),
+          ),
+        );
+      }
+
+      return Marker(
+        point: cluster.centre,
+        width: ClusterMarker.size,
+        height: ClusterMarker.size,
+        child: ClusterMarker(
+          count: cluster.items.length,
+          hasAvailability: cluster.items.any((p) => p.availability.state.isBookable),
+          // Tapping a cluster zooms into it rather than opening an ambiguous list.
+          onTap: () =>
+              _moveCamera(cluster.centre, (zoom + 2).clamp(3, AppConfig.mapMaxZoom)),
+        ),
+      );
+    }).toList(growable: false);
+  }
+
+  /// Grid clustering: bucket by rounded coordinate at a resolution derived from
+  /// zoom. Cheap, stable, and good enough for city-scale marker counts.
+  List<_Cluster> _cluster(List<ParkingSummary> parkings, double zoom) {
+    final withPosition = parkings.where((p) => p.location.hasCoordinates).toList();
+
+    // Above this zoom every lot gets its own pill.
+    if (zoom >= 15 || withPosition.length <= 8) {
+      return withPosition
+          .map((p) => _Cluster(centre: p.location.latLng!, items: [p]))
+          .toList(growable: false);
+    }
+
+    // Cell size halves with each zoom level, so clusters break apart naturally as
+    // the user zooms in. Clamped so the shift can never be negative or absurd.
+    final shift = (zoom.round().clamp(1, 20) - 8).clamp(0, 12);
+    final cellSize = 0.6 / (1 << shift);
+
+    final buckets = <String, List<ParkingSummary>>{};
+
+    for (final p in withPosition) {
+      final lat = p.location.lat!;
+      final lng = p.location.lng!;
+      final key = '${(lat / cellSize).floor()}:${(lng / cellSize).floor()}';
+      buckets.putIfAbsent(key, () => []).add(p);
+    }
+
+    return buckets.values.map((items) {
+      final lat = items.map((p) => p.location.lat!).reduce((a, b) => a + b) / items.length;
+      final lng = items.map((p) => p.location.lng!).reduce((a, b) => a + b) / items.length;
+      return _Cluster(centre: LatLng(lat, lng), items: items);
+    }).toList(growable: false);
+  }
+
+  /// The sheet's resting height, and the ONLY definition of it.
+  ///
+  /// This returned 172 while the sheet itself was a `SizedBox(height: 164)`, so the
+  /// recentre button and the OSM attribution were both positioned against a number
+  /// that disagreed with the thing they were meant to clear.
+  static const double _sheetPeek = 168;
+
+  double _sheetPeekHeight(BuildContext context) => _sheetPeek;
+
+  Future<void> _openFilters(BuildContext context) async {
+    await showFilterSheet(context);
+    // Filters changed the shared discovery query; re-query the visible viewport so
+    // the map reflects the same filters as the list.
+    if (mounted) await _searchVisible();
+  }
+}
+
+class _Cluster {
+  const _Cluster({required this.centre, required this.items});
+  final LatLng centre;
+  final List<ParkingSummary> items;
+}
+
+/* ── overlays ──────────────────────────────────────────────────────────────── */
+
+/// Filter button carrying the active-filter count, so the user can always see
+/// that results are narrowed without opening the sheet.
+class _FilterButton extends ConsumerWidget {
+  const _FilterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(discoveryQueryProvider).activeFilterCount;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        FloatingIconButton(
+          icon: Icons.tune_rounded,
+          tooltip: count == 0 ? 'Filters' : '$count filter${count == 1 ? '' : 's'} applied',
+          isActive: count > 0,
+          onPressed: onPressed,
+        ),
+        if (count > 0)
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: AppColors.danger,
+                borderRadius: AppRadius.chip,
+                border: Border.all(color: context.colors.surface, width: 1.5),
+              ),
+              child: Text(
+                '$count',
+                style: context.text.labelSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SearchPill extends StatelessWidget {
+  const _SearchPill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: context.colors.surface,
+      borderRadius: AppRadius.chip,
+      elevation: 0,
+      child: InkWell(
+        borderRadius: AppRadius.chip,
+        onTap: onTap,
+        child: Container(
+          height: AppSizes.minTouchTarget,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          decoration: BoxDecoration(
+            borderRadius: AppRadius.chip,
+            boxShadow: AppShadows.floating,
+            border: Border.all(color: context.colors.outline),
+            color: context.colors.surface,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded,
+                  size: AppSizes.iconMd, color: context.colors.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'Search an area or landmark',
+                  style: context.text.bodyMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchThisAreaButton extends StatelessWidget {
+  const _SearchThisAreaButton({required this.onTap, required this.isLoading});
+
+  final VoidCallback onTap;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Material(
+        color: AppColors.brand,
+        borderRadius: AppRadius.chip,
+        child: InkWell(
+          borderRadius: AppRadius.chip,
+          onTap: isLoading ? null : onTap,
+          child: Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+            decoration: BoxDecoration(
+              borderRadius: AppRadius.chip,
+              boxShadow: AppShadows.floating,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isLoading)
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                else
+                  const Icon(Icons.refresh_rounded,
+                      size: AppSizes.iconSm, color: Colors.white),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'Search this area',
+                  style: context.text.labelMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ZoomInHint extends StatelessWidget {
+  const _ZoomInHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          borderRadius: AppRadius.chip,
+          boxShadow: AppShadows.sm,
+          border: Border.all(color: context.colors.outline),
+        ),
+        child: Text('Zoom in to see more parking', style: context.text.bodySmall),
+      ),
+    );
+  }
+}
+
+class _Attribution extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: context.colors.surface.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(AppRadius.xs),
+      ),
+      child: Text(
+        AppConfig.mapAttribution,
+        style: context.text.labelSmall?.copyWith(fontSize: 9),
+      ),
+    );
+  }
+}
+
+/* ── results sheet ─────────────────────────────────────────────────────────── */
+
+class _ResultsSheet extends StatelessWidget {
+  const _ResultsSheet({
+    required this.markers,
+    required this.isLoading,
+    required this.error,
+    required this.selectedId,
+    required this.carousel,
+    required this.onCarouselChanged,
+    required this.onRetry,
+  });
+
+  final List<ParkingSummary> markers;
+  final bool isLoading;
+  final Object? error;
+  final int? selectedId;
+  final PageController carousel;
+  final ValueChanged<int> onCarouselChanged;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    // Peeking, the sheet is a one-card carousel over the map — the map stays the
+    // subject. Dragged up it becomes a real list, because comparing five lots one
+    // swipe at a time is not comparing them at all.
+    final height = MediaQuery.sizeOf(context).height;
+    final peek = (_ExploreScreenState._sheetPeek / height).clamp(0.12, 0.5);
+
+    return DraggableScrollableSheet(
+      initialChildSize: peek,
+      minChildSize: peek,
+      maxChildSize: 0.82,
+      snap: true,
+      snapSizes: [peek, 0.5, 0.82],
+      builder: (context, scrollController) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            borderRadius: AppRadius.sheet,
+            boxShadow: AppShadows.floating,
+          ),
+          child: Column(
+            children: [
+              const _SheetGrabber(),
+              Expanded(child: _buildContent(context, scrollController)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context, ScrollController controller) {
+    if (error != null && markers.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.sm,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: _SheetCard(
+          child: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: AppColors.danger),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text('Could not load parking here', style: context.text.bodyMedium),
+              ),
+              TextButton(onPressed: onRetry, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (isLoading && markers.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: LoadingSkeleton(height: 140),
+      );
+    }
+
+    if (markers.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: _SheetCard(
+          child: Row(
+            children: [
+              Icon(Icons.local_parking_rounded, color: context.colors.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'No parking in this area. Pan the map or zoom out.',
+                  style: context.text.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // One scroll view holding both behaviours, so the drag is continuous.
+    //
+    // At rest only the carousel is visible: swiping it moves the camera, which is
+    // the map⟷list sync this screen is built around. Dragging the sheet up scrolls
+    // straight on into the full list, because comparing five lots one swipe at a
+    // time is not comparing them.
+    return CustomScrollView(
+      controller: controller,
+      slivers: [
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 132,
+            child: PageView.builder(
+              controller: carousel,
+              onPageChanged: onCarouselChanged,
+              itemCount: markers.length,
+              padEnds: false,
+              itemBuilder: (context, index) {
+                final parking = markers[index];
+                return Padding(
+                  padding: const EdgeInsets.only(
+                    left: AppSpacing.lg,
+                    bottom: AppSpacing.sm,
+                  ),
+                  child: ParkingCard(
+                    parking: parking,
+                    variant: ParkingCardVariant.compact,
+                    isSelected: parking.id == selectedId,
+                    onTap: () => context.push(Routes.parkingDetail(parking.id)),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+
+        if (markers.length > 1) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.sm,
+              ),
+              child: Text(
+                '${markers.length} parking areas here',
+                style: context.text.labelSmall,
+              ),
+            ),
+          ),
+          SliverList.separated(
+            itemCount: markers.length,
+            separatorBuilder: (_, __) =>
+                Divider(height: 1, color: context.colors.outline),
+            itemBuilder: (context, index) {
+              final parking = markers[index];
+              return ParkingCard(
+                parking: parking,
+                variant: ParkingCardVariant.row,
+                isSelected: parking.id == selectedId,
+                onTap: () => context.push(Routes.parkingDetail(parking.id)),
+              );
+            },
+          ),
+        ],
+
+        const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xxl)),
+      ],
+    );
+  }
+}
+
+class _SheetCard extends StatelessWidget {
+  const _SheetCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: AppRadius.card,
+        boxShadow: AppShadows.floating,
+        border: Border.all(color: context.colors.outline),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// The handle that says "this can be dragged".
+///
+/// Without it a sheet that moves is undiscoverable — users only find the gesture
+/// by accident.
+class _SheetGrabber extends StatelessWidget {
+  const _SheetGrabber();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Drag to see more parking',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: context.colors.outline,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+        ),
+      ),
+    );
+  }
+}
